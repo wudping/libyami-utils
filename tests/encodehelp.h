@@ -40,6 +40,8 @@ static uint32_t initBufferFullness = 0;
 static uint32_t windowSize = 1000;
 static uint32_t targetPercentage = 95;
 static uint32_t qualityLevel = VIDEO_PARAMS_QUALITYLEVEL_NONE;
+static VideoFrameRate framerate[32];
+static uint32_t layerBitrate[32];
 
 #ifdef __BUILD_GET_MV__
 static FILE *MVFp;
@@ -86,6 +88,16 @@ static void print_help(const char* app)
     printf("   --vbv-buffer-size <vbv buffer size in bit> optional\n");
     printf("   --quality-level <encoded video qulity level(default 0), range[%d, %d]> optional\n",
         VIDEO_PARAMS_QUALITYLEVEL_NONE, VIDEO_PARAMS_QUALITYLEVEL_MAX);
+    printf("   The below 8 options are for vp8 SVC-T, the values of framerate and\n");
+    printf("   bitrate of the current layer include the lower layer.\n");
+    printf("   --fr0 <svc-t framerate for temporal layer 0>\n");
+    printf("   --fr1 <svc-t framerate for temporal layer 1>\n");
+    printf("   --fr2 <svc-t framerate for temporal layer 2>\n");
+    printf("   --fr3 <svc-t framerate for temporal layer 3>\n");
+    printf("   --br0 <svc-t bitrate for temporal layer 0>\n");
+    printf("   --br1 <svc-t bitrate for temporal layer 1>\n");
+    printf("   --br2 <svc-t bitrate for temporal layer 2>\n");
+    printf("   --br3 <svc-t bitrate for temporal layer 3>\n");
 }
 
 static VideoRateControl string_to_rc_mode(char *str)
@@ -108,6 +120,9 @@ static VideoRateControl string_to_rc_mode(char *str)
 static bool process_cmdline(int argc, char *argv[])
 {
     char opt;
+    int32_t ret;
+    memset(framerate, 0, sizeof(framerate));
+    memset(layerBitrate, 0, sizeof(layerBitrate));
     const struct option long_opts[] = {
         { "help", no_argument, NULL, 'h' },
         { "qp", required_argument, NULL, 0 },
@@ -123,6 +138,14 @@ static bool process_cmdline(int argc, char *argv[])
         { "vbv-buffer-fullness", required_argument, NULL, 0 },
         { "vbv-buffer-size", required_argument, NULL, 0 },
         { "quality-level", required_argument, NULL, 0 },
+        { "fr0", required_argument, NULL, 0 },
+        { "fr1", required_argument, NULL, 0 },
+        { "fr2", required_argument, NULL, 0 },
+        { "fr3", required_argument, NULL, 0 },
+        { "br0", required_argument, NULL, 0 },
+        { "br1", required_argument, NULL, 0 },
+        { "br2", required_argument, NULL, 0 },
+        { "br3", required_argument, NULL, 0 },
         { NULL, no_argument, NULL, 0 }
     };
     int option_index;
@@ -208,6 +231,45 @@ static bool process_cmdline(int argc, char *argv[])
                 case 13:
                     qualityLevel = atoi(optarg);
                     break;
+                case 14:
+                    ret = sscanf(optarg, "%d/%d", &(framerate[0].frameRateNum), &(framerate[0].frameRateDenom));
+                    if (2 != ret) {
+                        fprintf(stderr, "Can not interpret %s into fraction, it should be like: x/x\n", optarg);
+                        return false;
+                    }
+                    break;
+                case 15:
+                    ret = sscanf(optarg, "%d/%d", &(framerate[1].frameRateNum), &(framerate[1].frameRateDenom));
+                    if (2 != ret) {
+                        fprintf(stderr, "Can not interpret %s into fraction, it should be like: x/x\n", optarg);
+                        return false;
+                    }
+                    break;
+                case 16:
+                    ret = sscanf(optarg, "%d/%d", &(framerate[2].frameRateNum), &(framerate[2].frameRateDenom));
+                    if (2 != ret) {
+                        fprintf(stderr, "Can not interpret %s into fraction, it should be like: x/x\n", optarg);
+                        return false;
+                    }
+                    break;
+                case 17:
+                    ret = sscanf(optarg, "%d/%d", &(framerate[3].frameRateNum), &(framerate[3].frameRateDenom));
+                    if (2 != ret) {
+                        fprintf(stderr, "Can not interpret %s into fraction, it should be like: x/x\n", optarg);
+                        return false;
+                    }
+                    break;
+                case 18:
+                    layerBitrate[0] = atoi(optarg);
+                    break;
+                case 19:
+                    layerBitrate[1] = atoi(optarg);
+                    break;
+                case 20:
+                    layerBitrate[2] = atoi(optarg);
+                case 21:
+                    layerBitrate[3] = atoi(optarg);
+                    break;
             }
         }
     }
@@ -253,6 +315,16 @@ void setEncoderParameters(VideoParamsCommon* encVideoParams)
     //frame rate parameters.
     encVideoParams->frameRate.frameRateDenom = 1;
     encVideoParams->frameRate.frameRateNum = fps;
+
+    uint32_t num;
+    for (num = 0; num < 32; num++) {
+        if (!framerate[num].frameRateNum)
+            break;
+        encVideoParams->svctFrameRate.fraction[num].frameRateNum = framerate[num].frameRateNum;
+        encVideoParams->svctFrameRate.fraction[num].frameRateDenom = framerate[num].frameRateDenom;
+        encVideoParams->rcParams.layerBitRate[num] = layerBitrate[num];
+    }
+    encVideoParams->svctFrameRate.num = num;
 
     //picture type and bitrate
     encVideoParams->intraPeriod = intraPeriod;

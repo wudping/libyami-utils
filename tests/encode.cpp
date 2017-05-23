@@ -39,11 +39,13 @@ int main(int argc, char** argv)
     IVideoEncoder *encoder = NULL;
     uint32_t maxOutSize = 0;
     EncodeInput* input;
-    EncodeOutput* output;
+    EncodeOutput* output = NULL;
+    EncodeOutput* outputTemporal[32]; //just for SVC-T
     Encode_Status status;
     VideoFrameRawData inputBuffer;
     VideoEncOutputBuffer outputBuffer;
     int encodeFrameCount = 0;
+    uint32_t temporalLayerCount = 0;
 
     memset(&outputBuffer, 0, sizeof(VideoEncOutputBuffer));
     if (!process_cmdline(argc, argv))
@@ -83,6 +85,7 @@ int main(int argc, char** argv)
     setEncoderParameters(&encVideoParams);
     encVideoParams.size = sizeof(VideoParamsCommon);
     encoder->setParameters(VideoParamsTypeCommon, &encVideoParams);
+    temporalLayerCount = encVideoParams.svctFrameRate.num;
 
     VideoParamsHRD encVideoParamsHRD;
     encVideoParamsHRD.size = sizeof(VideoParamsHRD);
@@ -129,6 +132,38 @@ int main(int argc, char** argv)
     //init output buffer
     encoder->getMaxOutSize(&maxOutSize);
 
+    //just for SVC-T
+    if (temporalLayerCount) {
+        if (!strcmp(output->getMimeType(), YAMI_MIME_VP8)) {
+            const char* ext = strrchr(outputFileName, '.');
+            char filename[128];
+            memset(filename, 0, 128);
+            memcpy(filename, outputFileName, abs(ext - outputFileName));
+            memset(outputTemporal, 0, sizeof(outputTemporal));
+            for (uint8_t i = 0; i < temporalLayerCount; i++) {
+                char fullfilename[128];
+                sprintf(fullfilename, "%s_layer%d%s", filename, i, ext);
+                outputTemporal[i] = EncodeOutput::create(fullfilename, videoWidth, videoHeight, fps, codec);
+                if (!outputTemporal[i]) {
+                    fprintf(stderr, "fail to init output stream\n");
+                    for (uint8_t j = 0; j < i; j++)
+                        delete outputTemporal[j];
+                    delete input;
+                    delete output;
+                    return -1;
+                }
+            }
+        }
+        else {
+            fprintf(stderr, "SVC-T is unsupported for %s, just for VP8.\n", output->getMimeType());
+            encoder->stop();
+            releaseVideoEncoder(encoder);
+            delete output;
+            delete input;
+            return -1;
+        }
+    }
+
 #ifdef __BUILD_GET_MV__
     uint32_t size;
     VideoEncMVBuffer MVBuffer;
@@ -143,6 +178,9 @@ int main(int argc, char** argv)
         fprintf (stderr, "fail to create output\n");
         delete input;
         delete output;
+        if (temporalLayerCount)
+            for (uint32_t j = 0; j < temporalLayerCount; j++)
+                delete outputTemporal[j];
         return -1;
     }
     uint64_t i = 0;
@@ -165,6 +203,11 @@ int main(int argc, char** argv)
 #else
             status = encoder->getOutput(&outputBuffer, &MVBuffer, false);
 #endif
+            //just for SVC-T
+            if ((status == ENCODE_SUCCESS) && temporalLayerCount)
+                for (uint32_t j = outputBuffer.temporalLayer; j < temporalLayerCount; j++)
+                    outputTemporal[j]->write(outputBuffer.data, outputBuffer.dataSize);
+
             if (status == ENCODE_SUCCESS
                 && output->write(outputBuffer.data, outputBuffer.dataSize)) {
                 DEBUG("timeStamp(PTS) : "
@@ -224,6 +267,10 @@ error1:
     free(outputBuffer.data);
     delete output;
     delete input;
+    if (temporalLayerCount)
+        for (uint32_t j = 0; j < temporalLayerCount; j++)
+            delete outputTemporal[j];
+    return -1;
 #ifdef __BUILD_GET_MV__
     free(MVBuffer.data);
     fclose(MVFp);
