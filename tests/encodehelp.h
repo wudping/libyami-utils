@@ -260,15 +260,15 @@ static bool process_cmdline(int argc, char *argv[])
                     }
                     break;
                 case 18:
-                    layerBitrate[0] = atoi(optarg);
+                    layerBitrate[0] = atoi(optarg) * 1024;//kbps to bps
                     break;
                 case 19:
-                    layerBitrate[1] = atoi(optarg);
+                    layerBitrate[1] = atoi(optarg) * 1024;//kbps to bps
                     break;
                 case 20:
-                    layerBitrate[2] = atoi(optarg);
+                    layerBitrate[2] = atoi(optarg) * 1024;//kbps to bps
                 case 21:
-                    layerBitrate[3] = atoi(optarg);
+                    layerBitrate[3] = atoi(optarg) * 1024;//kbps to bps
                     break;
             }
         }
