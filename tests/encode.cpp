@@ -205,7 +205,7 @@ int main(int argc, char** argv)
 #endif
             //just for SVC-T
             if ((status == ENCODE_SUCCESS) && temporalLayerCount)
-                for (uint32_t j = outputBuffer.temporalLayer; j < temporalLayerCount; j++)
+                for (uint32_t j = outputBuffer.temporalLayerID; j < temporalLayerCount; j++)
                     outputTemporal[j]->write(outputBuffer.data, outputBuffer.dataSize);
 
             if (status == ENCODE_SUCCESS
