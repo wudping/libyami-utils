@@ -33,7 +33,7 @@ void usage();
 
 SharedPtr<VppInput> createInput(const char* filename, const SharedPtr<VADisplay>& display)
 {
-    SharedPtr<VppInput> input(VppInput::create(filename));
+    SharedPtr<VppInput> input(VppInput::create(filename, YAMI_FOURCC_NV12));
     if (!input) {
         ERROR("creat input failed");
         return input;
