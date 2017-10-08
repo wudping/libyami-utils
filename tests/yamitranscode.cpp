@@ -388,6 +388,7 @@ public:
             printf("create display failed");
             return false;
         }
+        m_frameWriter.reset(new VaapiFrameWriter(m_display));
         if (!createVpp()) {
             ERROR("create vpp failed");
             return false;
@@ -408,6 +409,10 @@ public:
         SharedPtr<VideoFrame> src;
         FpsCalc fps;
         uint32_t count = 0;
+        FILE *tmp = NULL;
+        if(! (tmp = fopen("xxx_dd_1920x1080.NV12", "w"))){
+            return false;
+        }
         while (m_input->read(src)) {
             SharedPtr<VideoFrame> dest = m_allocator->alloc();
             if (!dest) {
@@ -425,6 +430,7 @@ public:
 #else
             dest = src;
 #endif
+            m_frameWriter->write(tmp, dest);
 
             if(!m_output->output(dest))
                 break;
@@ -435,6 +441,8 @@ public:
         }
         src.reset();
         m_output->output(src);
+
+        fclose(tmp);
 
         fps.log();
 
@@ -455,6 +463,7 @@ private:
     SharedPtr<VppOutput> m_output;
     SharedPtr<FrameAllocator> m_allocator;
     SharedPtr<IVideoPostProcess> m_vpp;
+    SharedPtr<VaapiFrameWriter> m_frameWriter;
     TranscodeParams m_cmdParam;
 };
 
