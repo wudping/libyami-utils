@@ -425,6 +425,7 @@ public:
 #else
             dest = src;
 #endif
+            usleep(10 * 1000);
 
             if(!m_output->output(dest))
                 break;
