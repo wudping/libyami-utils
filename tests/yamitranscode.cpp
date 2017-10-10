@@ -30,6 +30,9 @@
 
 using namespace YamiMediaCodec;
 
+extern uint8_t frameData[10 * 1024 * 1024];
+extern uint32_t frameDataLen;
+
 static void print_help(const char* app)
 {
     printf("%s <options>\n", app);
@@ -430,7 +433,9 @@ public:
 #else
             dest = src;
 #endif
+            frameDataLen = 0;
             m_frameWriter->write(tmp, dest);
+            //printf("dpwu  %s %s %d, frameDataLen = %d ====\n", __FILE__, __FUNCTION__, __LINE__, frameDataLen);
 
             if(!m_output->output(dest))
                 break;

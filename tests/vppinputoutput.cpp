@@ -32,6 +32,9 @@
 #include "vppinputdecodecapi.h"
 using namespace YamiMediaCodec;
 
+uint8_t frameData[10 * 1024 * 1024];
+uint32_t frameDataLen = 0;
+
 #ifndef ANDROID
 SharedPtr<VADisplay> createVADisplay()
 {

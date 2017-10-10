@@ -34,6 +34,9 @@
 
 using namespace YamiMediaCodec;
 
+extern uint8_t frameData[10 * 1024 * 1024];
+extern uint32_t frameDataLen;
+
 struct VADisplayDeleter
 {
     VADisplayDeleter(int fd):m_fd(fd) {}
@@ -107,6 +110,7 @@ public:
             ERROR("vaMapBuffer failed = %d", status);
             return false;
         }
+        #if (0)
         bool ret = true;
         for (uint32_t i = 0; i < planes; i++) {
             char* ptr = buf + image.offsets[i];
@@ -120,9 +124,17 @@ public:
             }
         }
     out:
+        #endif
+        char* ptr = buf + image.offsets[0];
+        memcpy(&frameData[frameDataLen], ptr, 2073600);
+        frameDataLen += 2073600;
+        ptr = buf + image.offsets[1];
+        memcpy(&frameData[frameDataLen], ptr, 1036800);
+        frameDataLen += 1036800;
+        
         vaUnmapBuffer(*m_display, image.buf);
         vaDestroyImage(*m_display, image.image_id);
-        return ret;
+        return true;
 
     }
 private:
@@ -165,7 +177,12 @@ private:
     SharedPtr<VaapiFrameIO> m_frameio;
     static bool writeToFile(char* ptr, int size, FILE* fp)
     {
-        return fwrite(ptr, 1, size, fp) == (size_t)size;
+        //printf("dpwu  %s %s %d ====\n", __FILE__, __FUNCTION__, __LINE__);
+        //return fwrite(ptr, 1, size, fp) == (size_t)size;
+        
+        memcpy(&frameData[frameDataLen], ptr, size);
+        frameDataLen += size;
+        return true;
     }
 };
 //vaapi related operation end

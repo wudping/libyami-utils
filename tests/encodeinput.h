@@ -34,6 +34,7 @@ using namespace android;
 
 using namespace YamiMediaCodec;
 
+
 class EncodeInput;
 class EncodeInputFile;
 class EncodeInputCamera;
