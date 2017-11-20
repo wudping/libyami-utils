@@ -32,8 +32,17 @@ using namespace YamiMediaCodec;
 
 class MyDecodeInput : public DecodeInput{
 public:
+    #if (0)
     static const size_t MaxNaluSize = 1024*1024*4; // assume max nalu size is 4M
     static const size_t CacheBufferSize = 8 * MaxNaluSize;
+    #else
+    //decode all frames of sunflower_420_1920x1080.264;
+    //static const size_t MaxNaluSize = 12053900; // assume max nalu size is 4M
+    //static const size_t CacheBufferSize = 32053900;
+
+    static const size_t MaxNaluSize = 90112; // assume max nalu size is 4M
+    static const size_t CacheBufferSize = 120539;
+    #endif
     MyDecodeInput();
     virtual ~MyDecodeInput();
     bool initInput(const char* fileName);
