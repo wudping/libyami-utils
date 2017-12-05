@@ -1,12 +1,11 @@
-bin_PROGRAMS =
+bin_PROGRAMS = $(NULL)
 
-if ENABLE_X11
+if ENABLE_SIMPLEPLAYER
 bin_PROGRAMS += simpleplayer
+endif
 
 if BUILD_OCL_BLENDER
 bin_PROGRAMS += blend
-endif
-
 endif
 
 if ENABLE_DMABUF
