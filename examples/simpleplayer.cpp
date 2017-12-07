@@ -29,6 +29,8 @@
 #include <va/va_x11.h>
 #include <va/va_drm.h>
 #include <iostream>
+#include <sstream>
+#include <fstream>
 
 using namespace YamiMediaCodec;
 
@@ -147,18 +149,27 @@ public:
             status = m_decoder->decode(&inputBuffer);
             if (DECODE_FORMAT_CHANGE == status) {
                 //drain old buffers
-                renderOutputs();
+                if (!renderOutputs()) {
+                    return false;
+                }
                 const VideoFormatInfo *formatInfo = m_decoder->getFormatInfo();
-                resizeWindow(formatInfo->width, formatInfo->height);
+                if (!m_parameters.dumpToFile)
+                    resizeWindow(formatInfo->width, formatInfo->height);
+
+                m_width = formatInfo->width;
+                m_height = formatInfo->height;
                 //resend the buffer
                 status = m_decoder->decode(&inputBuffer);
             }
             if(status == DECODE_SUCCESS) {
-                renderOutputs();
+                if (!renderOutputs())
+                    return false;
             } else {
                 ERROR("decode error status = %d", status);
-                break;
+                return false;
             }
+            if (m_parameters.outputFrameNumber && m_frameNum >= m_parameters.outputFrameNumber)
+                break;
         }
         inputBuffer.data = NULL;
         inputBuffer.size = 0;
@@ -183,6 +194,9 @@ public:
         m_parameters.outputFrameNumber = 0;
         m_parameters.dumpToFile = true;
         m_drmFd = -1;
+        m_vaDisplay = NULL;
+        m_fpOutput = NULL;
+        m_gotFistFrame = false;
     }
     ~SimplePlayer()
     {
@@ -192,24 +206,112 @@ public:
         if (m_window) {
             XDestroyWindow(m_display.get(), m_window);
         }
+
+        if (m_ofs.is_open())
+            m_ofs.close();
     }
 private:
-    void renderOutputs()
+    bool getPlaneResolution_NV12(uint32_t pixelWidth, uint32_t pixelHeight, uint32_t byteWidth[3], uint32_t byteHeight[3])
+    {
+        int w = pixelWidth;
+        int h = pixelHeight;
+        uint32_t* width = byteWidth;
+        uint32_t* height = byteHeight;
+        //NV12 is special since it  need add one for width[1] when w is odd
+        {
+            width[0] = w;
+            height[0] = h;
+            width[1] = w + (w & 1);
+            height[1] = (h + 1) >> 1;
+            return true;
+        }
+    }
+
+    bool writeNV12ToFile(VASurfaceID surface, int w, int h)
+    {
+        if (!m_ofs.is_open()) {
+            ERROR("No output file for NV12.\n");
+            return false;
+        }
+
+        VAImage image;
+        VAStatus status = vaDeriveImage(m_vaDisplay, surface, &image);
+        if (status != VA_STATUS_SUCCESS) {
+            ERROR("vaDeriveImage failed = %d\n", status);
+            return false;
+        }
+        uint32_t byteWidth[3], byteHeight[3], planes;
+        //image.width is not equal to frame->crop.width.
+        //for supporting VPG Driver, use YV12 to replace I420
+        planes = 2;
+        if (!getPlaneResolution_NV12(w, h, byteWidth, byteHeight)) {
+            return false;
+        }
+        char* buf;
+        status = vaMapBuffer(m_vaDisplay, image.buf, (void**)&buf);
+        if (status != VA_STATUS_SUCCESS) {
+            vaDestroyImage(m_vaDisplay, image.image_id);
+            ERROR("vaMapBuffer failed = %d", status);
+            return false;
+        }
+        bool ret = true;
+        for (uint32_t i = 0; i < planes; i++) {
+            char* ptr = buf + image.offsets[i];
+            int w = byteWidth[i];
+            for (uint32_t j = 0; j < byteHeight[i]; j++) {
+                if (!m_ofs.write(reinterpret_cast<const char*>(ptr), w).good()) {
+                    goto out;
+                }
+                ptr += image.pitches[i];
+            }
+        }
+    out:
+        vaUnmapBuffer(m_vaDisplay, image.buf);
+        vaDestroyImage(m_vaDisplay, image.image_id);
+        return ret;
+    }
+
+    bool renderOutputs()
     {
         VAStatus status = VA_STATUS_SUCCESS;
         do {
             SharedPtr<VideoFrame> frame = m_decoder->getOutput();
-            if (!frame)
-                break;
-            status = vaPutSurface(m_vaDisplay, (VASurfaceID)frame->surface,
-                m_window, 0, 0, m_width, m_height, 0, 0, m_width, m_height,
-                NULL, 0, 0);
-            if (status != VA_STATUS_SUCCESS) {
-                ERROR("vaPutSurface return %d", status);
-                break;
+            if (!frame) {
+                return true;
+            }
+            if (m_parameters.dumpToFile) {
+                if (!m_ofs.is_open()) {
+                    if (m_parameters.outputFile.empty()) {
+                        std::ostringstream stringStream;
+                        stringStream << m_parameters.inputFile.c_str();
+                        stringStream << "_NV12_" << m_width << "x" << m_height << ".yuv";
+                        m_parameters.outputFile = stringStream.str();
+                    }
+                    m_ofs.open(m_parameters.outputFile.c_str(), std::ofstream::out | std::ofstream::trunc);
+                    if (!m_ofs) {
+                        ERROR("fail to open output file: %s", m_parameters.outputFile.c_str());
+                        return false;
+                    }
+                    INFO("output file(%s) is opened.", m_parameters.inputFile.c_str());
+                }
+
+                if (!writeNV12ToFile((VASurfaceID)frame->surface, m_width, m_height))
+                    return false;
+            }
+            else {
+                status = vaPutSurface(m_vaDisplay, (VASurfaceID)frame->surface,
+                    m_window, 0, 0, m_width, m_height, 0, 0, m_width, m_height,
+                    NULL, 0, 0);
+                if (status != VA_STATUS_SUCCESS) {
+                    ERROR("vaPutSurface return %d", status);
+                    break;
+                }
             }
             m_frameNum++;
-        } while (1);
+        } while (!m_parameters.outputFrameNumber
+            || (m_parameters.outputFrameNumber && m_frameNum < m_parameters.outputFrameNumber));
+
+        return true;
     }
 
     bool createVadisplay()
@@ -294,13 +396,16 @@ private:
     SimplePlayerParameter m_parameters;
     uint32_t m_frameNum;
     int m_drmFd;
+    FILE* m_fpOutput;
+    std::ofstream m_ofs;
+    bool m_gotFistFrame;
 };
 
 int main(int argc, char** argv)
 {
     SimplePlayer player;
     if (!player.init(argc, argv)) {
-        ERROR("init player failed with %s", argv[1]);
+        ERROR("init player failed");
         return -1;
     }
     if (!player.run()){
@@ -309,6 +414,5 @@ int main(int argc, char** argv)
     }
     std::cout << "decoded frame number:" << player.getFrameNum() << std::endl;
     return  0;
-
 }
 
