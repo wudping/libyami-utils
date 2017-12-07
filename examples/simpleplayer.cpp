@@ -27,6 +27,7 @@
 
 #include <X11/Xlib.h>
 #include <va/va_x11.h>
+#include <iostream>
 
 using namespace YamiMediaCodec;
 
@@ -36,19 +37,19 @@ public:
     bool init(int argc, char** argv)
     {
         if (argc != 2) {
-            printf("usage: simpleplayer xxx.264\n");
+            ERROR("usage: simpleplayer xxx.264");
             return false;
         }
         m_input.reset(DecodeInput::create(argv[1]));
         if (!m_input) {
-            fprintf(stderr, "failed to open %s", argv[1]);
+            ERROR("failed to open %s", argv[1]);
             return false;
         }
 
         //init decoder
         m_decoder.reset(createVideoDecoder(m_input->getMimeType()), releaseVideoDecoder);
         if (!m_decoder) {
-            fprintf(stderr, "failed create decoder for %s", m_input->getMimeType());
+            ERROR("failed create decoder for %s", m_input->getMimeType());
             return false;
         }
 
@@ -91,10 +92,25 @@ public:
                 break;
             }
         }
+        inputBuffer.data = NULL;
+        inputBuffer.size = 0;
+        m_decoder->decode(&inputBuffer);
+        renderOutputs();
+
         m_decoder->stop();
         return true;
     }
-    SimplePlayer():m_window(0), m_width(0), m_height(0) {}
+    uint32_t getFrameNum()
+    {
+        return m_frameNum;
+    }
+    SimplePlayer()
+        : m_window(0)
+        , m_width(0)
+        , m_height(0)
+        , m_frameNum(0)
+    {
+    }
     ~SimplePlayer()
     {
         if (m_nativeDisplay) {
@@ -112,9 +128,6 @@ private:
             SharedPtr<VideoFrame> frame = m_decoder->getOutput();
             if (!frame)
                 break;
-            static int32_t i_dpwu = 0;
-
-
             status = vaPutSurface(m_vaDisplay, (VASurfaceID)frame->surface,
                 m_window, 0, 0, m_width, m_height, 0, 0, m_width, m_height,
                 NULL, 0, 0);
@@ -122,15 +135,14 @@ private:
                 ERROR("vaPutSurface return %d", status);
                 break;
             }
-            i_dpwu++;
-            printf("dpwu  %s %s %d, i_dpwu = %d ====\n", __FILE__, __FUNCTION__, __LINE__, i_dpwu);
+            m_frameNum++;
         } while (1);
     }
     bool initDisplay()
     {
         Display* display = XOpenDisplay(NULL);
         if (!display) {
-            fprintf(stderr, "Failed to XOpenDisplay \n");
+            ERROR("Failed to XOpenDisplay \n");
             return false;
         }
         m_display.reset(display, XCloseDisplay);
@@ -139,7 +151,7 @@ private:
         VAStatus status;
         status = vaInitialize(m_vaDisplay, &major, &minor);
         if (status != VA_STATUS_SUCCESS) {
-            fprintf(stderr, "init va failed status = %d", status);
+            ERROR("init va failed status = %d", status);
             return false;
         }
         m_nativeDisplay.reset(new NativeDisplay);
@@ -178,6 +190,7 @@ private:
     SharedPtr<IVideoDecoder> m_decoder;
     SharedPtr<DecodeInput> m_input;
     int m_width, m_height;
+    uint32_t m_frameNum;
 };
 
 int main(int argc, char** argv)
@@ -192,7 +205,7 @@ int main(int argc, char** argv)
         ERROR("run simple player failed");
         return -1;
     }
-    printf("play file done\n");
+    std::cout << "decoded frame number:" << player.getFrameNum() << std::endl;
     return  0;
 
 }
