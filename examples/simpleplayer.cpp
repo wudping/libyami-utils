@@ -112,6 +112,9 @@ private:
             SharedPtr<VideoFrame> frame = m_decoder->getOutput();
             if (!frame)
                 break;
+            static int32_t i_dpwu = 0;
+
+
             status = vaPutSurface(m_vaDisplay, (VASurfaceID)frame->surface,
                 m_window, 0, 0, m_width, m_height, 0, 0, m_width, m_height,
                 NULL, 0, 0);
@@ -119,6 +122,8 @@ private:
                 ERROR("vaPutSurface return %d", status);
                 break;
             }
+            i_dpwu++;
+            printf("dpwu  %s %s %d, i_dpwu = %d ====\n", __FILE__, __FUNCTION__, __LINE__, i_dpwu);
         } while (1);
     }
     bool initDisplay()
