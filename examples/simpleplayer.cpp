@@ -27,6 +27,7 @@
 
 #include <X11/Xlib.h>
 #include <va/va_x11.h>
+#include <va/va_drm.h>
 #include <iostream>
 
 using namespace YamiMediaCodec;
@@ -181,6 +182,7 @@ public:
         m_parameters.outputFile.clear();
         m_parameters.outputFrameNumber = 0;
         m_parameters.dumpToFile = true;
+        m_drmFd = -1;
     }
     ~SimplePlayer()
     {
@@ -209,15 +211,39 @@ private:
             m_frameNum++;
         } while (1);
     }
+
+    bool createVadisplay()
+    {
+        if (m_parameters.dumpToFile) {
+            m_drmFd = open("/dev/dri/renderD128", O_RDWR);
+            if (m_drmFd < 0) {
+                CPPPRINT("can't open /dev/dri/renderD128, try to /dev/dri/card0");
+                m_drmFd = open("/dev/dri/card0", O_RDWR);
+            }
+            if (m_drmFd < 0) {
+                ERROR("can't open drm device");
+                return false;
+            }
+
+            m_vaDisplay = vaGetDisplayDRM(m_drmFd);
+        }
+        else {
+            Display* display = XOpenDisplay(NULL);
+            if (!display) {
+                ERROR("Failed to XOpenDisplay.\n");
+                return false;
+            }
+            m_display.reset(display, XCloseDisplay);
+            m_vaDisplay = vaGetDisplay(m_display.get());
+        }
+        return true;
+    }
+
     bool initDisplay()
     {
-        Display* display = XOpenDisplay(NULL);
-        if (!display) {
-            ERROR("Failed to XOpenDisplay \n");
+        if (!createVadisplay())
             return false;
-        }
-        m_display.reset(display, XCloseDisplay);
-        m_vaDisplay = vaGetDisplay(m_display.get());
+
         int major, minor;
         VAStatus status;
         status = vaInitialize(m_vaDisplay, &major, &minor);
@@ -225,11 +251,15 @@ private:
             ERROR("init va failed status = %d", status);
             return false;
         }
+        else
+            INFO("major = %d, minor = %d\n", major, minor);
+
         m_nativeDisplay.reset(new NativeDisplay);
         m_nativeDisplay->type = NATIVE_DISPLAY_VA;
         m_nativeDisplay->handle = (intptr_t)m_vaDisplay;
         return true;
     }
+
     void resizeWindow(int width, int height)
     {
         Display* display = m_display.get();
@@ -263,11 +293,11 @@ private:
     int m_width, m_height;
     SimplePlayerParameter m_parameters;
     uint32_t m_frameNum;
+    int m_drmFd;
 };
 
 int main(int argc, char** argv)
 {
-
     SimplePlayer player;
     if (!player.init(argc, argv)) {
         ERROR("init player failed with %s", argv[1]);
