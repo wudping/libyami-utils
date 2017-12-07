@@ -31,20 +31,84 @@
 
 using namespace YamiMediaCodec;
 
+#define CPPPRINT(...) std::cout << __VA_ARGS__ << std::endl
+
+typedef struct SimplePlayerParameter {
+    string inputFile;
+    string outputFile;
+    uint32_t outputFrameNumber;
+    bool dumpToFile;
+} SimplePlayerParameter;
+
+void printHelp(const char* app)
+{
+    CPPPRINT(app << " -i input.264 -m 0");
+    CPPPRINT("   -i media file to decode");
+    CPPPRINT("   -o dumped output file");
+    CPPPRINT("   -n specify how many frames to be decoded");
+    CPPPRINT("   -m render mode, default 0");
+    CPPPRINT("      0: dump video frame to file in NV12 format [*]");
+    CPPPRINT("      1: render to X window [*]");
+}
+
+bool processCmdLine(int argc, char** argv, SimplePlayerParameter* parameters)
+{
+    char opt;
+    while ((opt = getopt(argc, argv, "h:i:o:n:m:?")) != -1) {
+        switch (opt) {
+        case 'h':
+        case '?':
+            printHelp(argv[0]);
+            return false;
+        case 'i':
+            parameters->inputFile.assign(optarg);
+            break;
+        case 'o':
+            parameters->outputFile.assign(optarg);
+            break;
+        case 'n':
+            parameters->outputFrameNumber = atoi(optarg);
+            break;
+        case 'm':
+            parameters->dumpToFile = !atoi(optarg);
+            break;
+        default:
+            printHelp(argv[0]);
+            return false;
+        }
+    }
+
+    if (optind < argc) {
+        int indexOpt = optind;
+        CPPPRINT("unrecognized option: ");
+        while (indexOpt < argc)
+            CPPPRINT(argv[indexOpt++]);
+        CPPPRINT("");
+        return false;
+    }
+
+    if (parameters->inputFile.empty()) {
+        printHelp(argv[0]);
+        ERROR("no input file.");
+        return false;
+    }
+    return true;
+}
+
 class SimplePlayer
 {
 public:
     bool init(int argc, char** argv)
     {
-        if (argc != 2) {
-            ERROR("usage: simpleplayer xxx.264");
+        if (!processCmdLine(argc, argv, &m_parameters))
             return false;
-        }
-        m_input.reset(DecodeInput::create(argv[1]));
+
+        m_input.reset(DecodeInput::create(m_parameters.inputFile.c_str()));
         if (!m_input) {
-            ERROR("failed to open %s", argv[1]);
+            ERROR("failed to open file: %s.", m_parameters.inputFile.c_str());
             return false;
         }
+        INFO("input initialization finished with file: %s", m_parameters.inputFile.c_str());
 
         //init decoder
         m_decoder.reset(createVideoDecoder(m_input->getMimeType()), releaseVideoDecoder);
@@ -52,12 +116,15 @@ public:
             ERROR("failed create decoder for %s", m_input->getMimeType());
             return false;
         }
+        INFO("decoder is created successfully");
 
         if (!initDisplay()) {
             return false;
         }
+
         //set native display
         m_decoder->setNativeDisplay(m_nativeDisplay.get());
+        INFO("init finished.");
         return true;
     }
     bool run()
@@ -110,6 +177,10 @@ public:
         , m_height(0)
         , m_frameNum(0)
     {
+        m_parameters.inputFile.clear();
+        m_parameters.outputFile.clear();
+        m_parameters.outputFrameNumber = 0;
+        m_parameters.dumpToFile = true;
     }
     ~SimplePlayer()
     {
@@ -190,6 +261,7 @@ private:
     SharedPtr<IVideoDecoder> m_decoder;
     SharedPtr<DecodeInput> m_input;
     int m_width, m_height;
+    SimplePlayerParameter m_parameters;
     uint32_t m_frameNum;
 };
 
