@@ -264,9 +264,12 @@ private:
                 }
                 
                 printf("dpwu  %s %s %d ====\n", __FILE__, __FUNCTION__, __LINE__);
-
+                
+                writeNV12ToFile((VASurfaceID)frame->surface, frame->crop.width, frame->crop.height);
+                /*
                 if (!writeNV12ToFile((VASurfaceID)frame->surface, m_width, m_height))
                     return false;
+                */
             } else {
                 status = vaPutSurface(m_vaDisplay, (VASurfaceID)frame->surface,
                     m_window, 0, 0, m_width, m_height, 0, 0, m_width, m_height,
@@ -281,9 +284,53 @@ private:
         return true;
     }
 #endif
+
 #if (1)
+void renderOutputs()
+{
+    VAStatus status = VA_STATUS_SUCCESS;
+    do {
+        SharedPtr<VideoFrame> frame = m_decoder->getOutput();
+        if (!frame)
+            return ;
+        
+        m_parameters.dumpToFile = true;
+        if (m_parameters.dumpToFile){
+            if (!m_fpOutput) {
+                if (m_parameters.outputFile.empty()) {
+                    std::ostringstream stringStream;
+                    stringStream << m_parameters.inputFile.c_str();
+                    stringStream << "_NV12_" << m_width << "x" << m_height << ".yuv";
+                    m_parameters.outputFile = stringStream.str();
+                }
+                m_fpOutput = fopen(m_parameters.outputFile.c_str(), "wb");
+                if (!m_fpOutput) {
+                    ERROR("fail to open output file: %s", m_parameters.outputFile.c_str());
+                    break; //return false;
+                }
+                INFO("output file(%s) is opened.", m_parameters.inputFile.c_str());
+            }
+
+            writeNV12ToFile((VASurfaceID)frame->surface, frame->crop.width, frame->crop.height);
+        }else {
+            status = vaPutSurface(m_vaDisplay, (VASurfaceID)frame->surface,
+                m_window, 0, 0, m_width, m_height, 0, 0, m_width, m_height,
+                NULL, 0, 0);
+            if (status != VA_STATUS_SUCCESS) {
+                ERROR("vaPutSurface return %d", status);
+                break;
+            }
+        }
+        m_frameNum++;
+    } while(1);//while (m_parameters.outputFrameNumber && m_frameNum < m_parameters.outputFrameNumber);
+}
+
+#endif
+
+#if (0)
     void renderOutputs()
     {
+        VAStatus status = VA_STATUS_SUCCESS;
         do {
             SharedPtr<VideoFrame> frame = m_decoder->getOutput();
             if (!frame)
@@ -291,75 +338,36 @@ private:
             
             m_parameters.dumpToFile = true;
             if (m_parameters.dumpToFile){
-                if(output_file){                    
+                if (!m_fpOutput) {
+                    if (m_parameters.outputFile.empty()) {
+                        std::ostringstream stringStream;
+                        stringStream << m_parameters.inputFile.c_str();
+                        stringStream << "_NV12_" << m_width << "x" << m_height << ".yuv";
+                        m_parameters.outputFile = stringStream.str();
+                    }
+                    m_fpOutput = fopen(m_parameters.outputFile.c_str(), "wb");
                     if (!m_fpOutput) {
-                        if (m_parameters.outputFile.empty()) {
-                            std::ostringstream stringStream;
-                            stringStream << m_parameters.inputFile.c_str();
-                            stringStream << "_NV12_" << m_width << "x" << m_height << ".yuv";
-                            m_parameters.outputFile = stringStream.str();
-                            printf("dpwu  %s %s %d, m_parameters.outputFile.c_str() = %s ====\n", __FILE__, __FUNCTION__, __LINE__, m_parameters.outputFile.c_str());
-                        }
-                        printf("dpwu  %s %s %d, m_parameters.outputFile.c_str() = %s ====\n", __FILE__, __FUNCTION__, __LINE__, m_parameters.outputFile.c_str());
-                        m_fpOutput = fopen(m_parameters.outputFile.c_str(), "wb");
-                        if (!m_fpOutput) {
-                            ERROR("fail to open output file: %s", m_parameters.outputFile.c_str());
-                            break; //return false;
-                        }
-                        INFO("output file(%s) is opened.", m_parameters.inputFile.c_str());
+                        ERROR("fail to open output file: %s", m_parameters.outputFile.c_str());
+                        break; //return false;
                     }
-                    
-                    if (m_fpOutput){
-                        //doIO(m_fpOutput, frame);
-                        printf("dpwu  %s %s %d ====\n", __FILE__, __FUNCTION__, __LINE__);
-                        writeNV12ToFile((VASurfaceID)frame->surface, frame->crop.width, frame->crop.height);
-                        if(! output_all_file){
-                            m_getFirst = 1;
-                            break;
-                        }
-                    }
+                    INFO("output file(%s) is opened.", m_parameters.inputFile.c_str());
                 }
-                else{
-                    m_getFirst = 1;
+
+                writeNV12ToFile((VASurfaceID)frame->surface, frame->crop.width, frame->crop.height);
+            }else {
+                status = vaPutSurface(m_vaDisplay, (VASurfaceID)frame->surface,
+                    m_window, 0, 0, m_width, m_height, 0, 0, m_width, m_height,
+                    NULL, 0, 0);
+                if (status != VA_STATUS_SUCCESS) {
+                    ERROR("vaPutSurface return %d", status);
                     break;
                 }
             }
+            m_frameNum++;
         } while (1);
     }
 #endif
 
-#if (0)
-    void renderOutputs()
-    {
-        do {
-            SharedPtr<VideoFrame> frame = m_decoder->getOutput();
-            if (!frame)
-                return ;
-            else{
-                if(output_file){
-                    if (output_file)
-                        if(! m_fp){
-                            char file_name[128];
-                            sprintf (file_name, "dd_sim_nv12_%dx%d.yuv", frame->crop.width, frame->crop.height);
-                            fprintf(stderr, "%s %s %d, file_name = %s ====\n", __FILE__, __FUNCTION__, __LINE__, file_name);
-                            m_fp = fopen(file_name, "wb");
-                        }
-                    if (m_fp){
-                        doIO(m_fp, frame);
-                        if(! output_all_file){
-                            m_getFirst = 1;
-                            break;
-                        }
-                    }
-                }
-                else{
-                    m_getFirst = 1;
-                    break;
-                }
-            }
-        } while (1);
-    }
-#endif
 
     bool createVadisplay()
     {
@@ -429,103 +437,7 @@ private:
         }
         return false;
     }
-#if (1)
-        bool doIO(FILE* fp, const SharedPtr<VideoFrame>& frame)
-        {
-            if (!fp || !frame) {
-                ERROR("invalid param");
-                return false;
-            }
-            VASurfaceID surface = (VASurfaceID)frame->surface;
-            VAImage image;
-    
-            VAStatus status = vaDeriveImage(m_vaDisplay,surface,&image);
-            if (status != VA_STATUS_SUCCESS) {
-                ERROR("vaDeriveImage failed = %d", status);
-                return false;
-            }
-            uint32_t byteWidth[3], byteHeight[3], planes;
-            //image.width is not equal to frame->crop.width.
-            //for supporting VPG Driver, use YV12 to replace I420
-            if (!getPlaneResolution(frame->fourcc, frame->crop.width, frame->crop.height, byteWidth, byteHeight, planes)) {
-                ERROR("get plane reoslution failed for %x, %dx%d", frame->fourcc, frame->crop.width, frame->crop.height);
-                return false;
-            }
-            char* buf;
-            status = vaMapBuffer(m_vaDisplay, image.buf, (void**)&buf);
-            if (status != VA_STATUS_SUCCESS) {
-                vaDestroyImage(m_vaDisplay, image.image_id);
-                ERROR("vaMapBuffer failed = %d", status);
-                return false;
-            }
-            bool ret = true;
-            for (uint32_t i = 0; i < planes; i++) {
-                char* ptr = buf + image.offsets[i];
-                int w = byteWidth[i];
-                for (uint32_t j = 0; j < byteHeight[i]; j++) {
-                    //ret = m_io(ptr, w, fp);
-                    ret = fwrite(ptr, 1, w, fp);
-                    if (!ret)
-                        goto out;
-                    ptr += image.pitches[i];
-                }
-            }
-        out:
-            vaUnmapBuffer(m_vaDisplay, image.buf);
-            vaDestroyImage(m_vaDisplay, image.image_id);
-            return ret;
-    
-        }
-#endif
 
-#if (0)
-    bool doIO(FILE* fp, const SharedPtr<VideoFrame>& frame)
-    {
-        if (!fp || !frame) {
-            ERROR("invalid param");
-            return false;
-        }
-        VASurfaceID surface = (VASurfaceID)frame->surface;
-        VAImage image;
-
-        VAStatus status = vaDeriveImage(m_vaDisplay,surface,&image);
-        if (status != VA_STATUS_SUCCESS) {
-            ERROR("vaDeriveImage failed = %d", status);
-            return false;
-        }
-        uint32_t byteWidth[3], byteHeight[3], planes;
-        //image.width is not equal to frame->crop.width.
-        //for supporting VPG Driver, use YV12 to replace I420
-        if (!getPlaneResolution(frame->fourcc, frame->crop.width, frame->crop.height, byteWidth, byteHeight, planes)) {
-            ERROR("get plane reoslution failed for %x, %dx%d", frame->fourcc, frame->crop.width, frame->crop.height);
-            return false;
-        }
-        char* buf;
-        status = vaMapBuffer(m_vaDisplay, image.buf, (void**)&buf);
-        if (status != VA_STATUS_SUCCESS) {
-            vaDestroyImage(m_vaDisplay, image.image_id);
-            ERROR("vaMapBuffer failed = %d", status);
-            return false;
-        }
-        bool ret = true;
-        for (uint32_t i = 0; i < planes; i++) {
-            char* ptr = buf + image.offsets[i];
-            int w = byteWidth[i];
-            for (uint32_t j = 0; j < byteHeight[i]; j++) {
-                //ret = m_io(ptr, w, fp);
-                ret = fwrite(ptr, 1, w, fp);
-                if (!ret)
-                    goto out;
-                ptr += image.pitches[i];
-            }
-        }
-    out:
-        vaUnmapBuffer(m_vaDisplay, image.buf);
-        vaDestroyImage(m_vaDisplay, image.image_id);
-        return ret;
-
-    }
-#endif
 
     SharedPtr<Display> m_display;
     SharedPtr<NativeDisplay> m_nativeDisplay;
