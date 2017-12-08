@@ -41,6 +41,7 @@ typedef struct SimplePlayerParameter {
     string outputFile;
     uint32_t outputFrameNumber;
     bool dumpToFile;
+    bool getFirstFrame;
 } SimplePlayerParameter;
 
 void printHelp(const char* app)
@@ -48,6 +49,7 @@ void printHelp(const char* app)
     CPPPRINT(app << " -i input.264 -m 0");
     CPPPRINT("   -i media file to decode");
     CPPPRINT("   -o dumped output file");
+    CPPPRINT("   -g just to get surface of the first decoded frame");
     CPPPRINT("   -n specify how many frames to be decoded");
     CPPPRINT("   -m render mode, default 0");
     CPPPRINT("      0: dump video frame to file in NV12 format [*]");
@@ -57,7 +59,7 @@ void printHelp(const char* app)
 bool processCmdLine(int argc, char** argv, SimplePlayerParameter* parameters)
 {
     char opt;
-    while ((opt = getopt(argc, argv, "h:i:o:n:m:?")) != -1) {
+    while ((opt = getopt(argc, argv, "h?gi:o:n:m:")) != -1) {
         switch (opt) {
         case 'h':
         case '?':
@@ -74,6 +76,9 @@ bool processCmdLine(int argc, char** argv, SimplePlayerParameter* parameters)
             break;
         case 'm':
             parameters->dumpToFile = !atoi(optarg);
+            break;
+        case 'g':
+            parameters->getFirstFrame = true;
             break;
         default:
             printHelp(argv[0]);
@@ -168,13 +173,17 @@ public:
                 ERROR("decode error status = %d", status);
                 return false;
             }
-            if (m_parameters.outputFrameNumber && m_frameNum >= m_parameters.outputFrameNumber)
+            if (m_gotFistFrame
+                || (m_parameters.outputFrameNumber && m_frameNum >= m_parameters.outputFrameNumber))
                 break;
         }
-        inputBuffer.data = NULL;
-        inputBuffer.size = 0;
-        m_decoder->decode(&inputBuffer);
-        renderOutputs();
+        //if not to dump all decoded frames, vaDestroySurfaces will get an error: invalid VADisplay
+        if (!m_gotFistFrame) {
+            inputBuffer.data = NULL;
+            inputBuffer.size = 0;
+            m_decoder->decode(&inputBuffer);
+            renderOutputs();
+        }
 
         m_decoder->stop();
         return true;
@@ -279,7 +288,10 @@ private:
             if (!frame) {
                 return true;
             }
-            if (m_parameters.dumpToFile) {
+            if (m_parameters.getFirstFrame) {
+                m_gotFistFrame = true;
+            }
+            else if (m_parameters.dumpToFile) {
                 if (!m_ofs.is_open()) {
                     if (m_parameters.outputFile.empty()) {
                         std::ostringstream stringStream;
@@ -308,6 +320,8 @@ private:
                 }
             }
             m_frameNum++;
+            if (m_gotFistFrame)
+                break;
         } while (!m_parameters.outputFrameNumber
             || (m_parameters.outputFrameNumber && m_frameNum < m_parameters.outputFrameNumber));
 
