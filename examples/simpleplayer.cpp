@@ -40,15 +40,21 @@ typedef struct SimplePlayerParameter {
     string inputFile;
     string outputFile;
     uint32_t outputFrameNumber;
+    uint16_t surfaceNumber;
+    uint32_t readSize;
     bool dumpToFile;
     bool getFirstFrame;
+    bool enableLowLatency;
 } SimplePlayerParameter;
 
 void printHelp(const char* app)
 {
     CPPPRINT(app << " -i input.264 -m 0");
     CPPPRINT("   -i media file to decode");
-    CPPPRINT("   -o dumped output file");
+    CPPPRINT("   -o specify the name of dumped output file");
+    CPPPRINT("   -r read size, only for 264, default 120539");
+    CPPPRINT("   -s surface number, only for 264, default 8");
+    CPPPRINT("   -l low latency");
     CPPPRINT("   -g just to get surface of the first decoded frame");
     CPPPRINT("   -n specify how many frames to be decoded");
     CPPPRINT("   -m render mode, default 0");
@@ -59,12 +65,24 @@ void printHelp(const char* app)
 bool processCmdLine(int argc, char** argv, SimplePlayerParameter* parameters)
 {
     char opt;
-    while ((opt = getopt(argc, argv, "h?gi:o:n:m:")) != -1) {
+    while ((opt = getopt(argc, argv, "h?r:s:lgi:o:n:m:")) != -1) {
         switch (opt) {
         case 'h':
         case '?':
             printHelp(argv[0]);
             return false;
+        case 'r':
+            parameters->readSize = atoi(optarg);
+            break;
+        case 's':
+            parameters->surfaceNumber = atoi(optarg);
+            break;
+        case 'l':
+            parameters->enableLowLatency = true;
+            break;
+        case 'g':
+            parameters->getFirstFrame = true;
+            break;
         case 'i':
             parameters->inputFile.assign(optarg);
             break;
@@ -76,9 +94,6 @@ bool processCmdLine(int argc, char** argv, SimplePlayerParameter* parameters)
             break;
         case 'm':
             parameters->dumpToFile = !atoi(optarg);
-            break;
-        case 'g':
-            parameters->getFirstFrame = true;
             break;
         default:
             printHelp(argv[0]);
@@ -111,7 +126,10 @@ public:
         if (!processCmdLine(argc, argv, &m_parameters))
             return false;
 
-        m_input.reset(DecodeInput::create(m_parameters.inputFile.c_str()));
+        if (m_parameters.readSize)
+            m_input.reset(DecodeInput::create(m_parameters.inputFile.c_str(), m_parameters.readSize));
+        else
+            m_input.reset(DecodeInput::create(m_parameters.inputFile.c_str()));
         if (!m_input) {
             ERROR("failed to open file: %s.", m_parameters.inputFile.c_str());
             return false;
@@ -146,6 +164,12 @@ public:
             configBuffer.size = codecData.size();
         }
 
+        configBuffer.enableLowLatency = m_parameters.enableLowLatency;
+        if (m_parameters.surfaceNumber) {
+            configBuffer.noNeedExtraSurface = true;
+            configBuffer.flag |= HAS_SURFACE_NUMBER;
+            configBuffer.surfaceNumber = m_parameters.surfaceNumber;
+        }
         Decode_Status status = m_decoder->start(&configBuffer);
         assert(status == DECODE_SUCCESS);
 
@@ -178,12 +202,10 @@ public:
                 break;
         }
         //if not to dump all decoded frames, vaDestroySurfaces will get an error: invalid VADisplay
-        if (!m_gotFistFrame) {
-            inputBuffer.data = NULL;
-            inputBuffer.size = 0;
-            m_decoder->decode(&inputBuffer);
-            renderOutputs();
-        }
+        inputBuffer.data = NULL;
+        inputBuffer.size = 0;
+        m_decoder->decode(&inputBuffer);
+        renderOutputs();
 
         m_decoder->stop();
         return true;
@@ -201,7 +223,11 @@ public:
         m_parameters.inputFile.clear();
         m_parameters.outputFile.clear();
         m_parameters.outputFrameNumber = 0;
+        m_parameters.surfaceNumber = 0;
+        m_parameters.readSize = 0;
         m_parameters.dumpToFile = true;
+        m_parameters.getFirstFrame = false;
+        m_parameters.enableLowLatency = false;
         m_drmFd = -1;
         m_vaDisplay = NULL;
         m_fpOutput = NULL;
