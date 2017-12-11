@@ -1,0 +1,11 @@
+prefix=@prefix@
+exec_prefix=@exec_prefix@
+libdir=@libdir@
+includedir=@includedir@
+
+Name: libyami_v4l2
+Description: yami based v4l2 plugin
+Version: @YAMI_API_VERSION@
+Requires: libyami
+Libs: -L${libdir} -lyami_v4l2
+Cflags: -I${includedir}/libyami

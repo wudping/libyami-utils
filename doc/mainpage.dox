@@ -1,0 +1,18 @@
+/**
+* \mainpage Entrance to the interested document
+* <pre>
+* ==== Here are API of libyami
+* == Decoder APIs
+* class YamiMediaCodec::IVideoDecoder
+* func createVideoDecoder()
+* func releaseVideoDecoder()
+*
+* == Encoder APIs
+* class YamiMediaCodec::IVideoEncoder
+* func createVideoEncoder()
+* func releaseVideoEncoder()
+*
+* ==== More information on internal implementation:
+* class YamiMediaCodec::VaapiDecSurfacePool
+* </pre>
+*/

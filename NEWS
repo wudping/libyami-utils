@@ -1,0 +1,260 @@
+libyami NEWS -- summary of changes.  2016-9-26
+Copyright (c) 2010, The WebM Project authors.
+Copyright (C) 2011-2016 Intel Corporation
+Copyright (C) 2015-2016 Alibaba
+
+
+libyami 1.0.0(API:0.3.0) release, work with libva 2016Q3 release
+=====================
+We add following major features:
++ 7423a97 add vp9 encoder
++ f6f1483 add sharpening, denoise, deinterlace for vpp
++ 366d909 add support for 422H, 422V and 444P
++ 2d4a536 add wayland support to v4l2decoder
++ 784ea0f improve h264 encoder speed for memory limited system
++ e57989f improve mpeg2 pass rate from 70% to 100%
++ 112b921 improve vc1 pass rate from 70% to 92%
++ 7f2e032 add profile setting for h264encoder
++ some more encoder setting for h264 and h265
++ more bugs fix and features please refer to git log
+- convert odd resolution from NV12 to I420 will make output yuv twisted
+- some unittest will failed.
+
+We change API from 0.2.0 to 0.3.0 since following interface change
+9f45ee7 add vp9 encoder
+765cb6d add single header Yami.h/YamiC.h for user to include
+99b85bc map tr1 name space to std name space
+ea0b5fd add SVC-T support for h264 CQP mode
+366d909 add support for jpeg 422H, 422V and 444P
+2d4a536 add wayland support to v4l2decoder
+1b53e29 deleted some unused encoder API
+3147d36 enc264: implement I/P/B QP setting on CQP mode
+f6f1483 vpp: add denoise,sharpening and deinterlace
+
+
+
+libyami 0.4.0 release, work with libva 2016Q2 release
+=====================
+We relicensed entire project from LGPL to Apache V2
++add mpeg2 decoder
++add vc1 decoder
++merge all so to single libyami.so
+-mpeg2/vc1 pass conformance rate is 70%
+    fix patch should ready in near future.
+
+
+
+libyami 0.3.1 release, work with libva 2015Q4 release
+=====================
++b frame for h264 encoder
++CBR for h265 encoder
++yamitransocde application, it will do zero copy transcode, much faster than yamiencode
++fix static library link issue
++fix various issue in vaapidisplay, vp8dec, h264enc, h265enc, factory
+-transocde application will use default configuration, it did not use user set one.
+-if you use latest ffmpeg, vp9 decoder will failed for some clips.mentioned in #347.
+    it's not core library's issue. It's a yamidecode's issue.
+    You can use ffmpeg 2.6 as workaround.
+
+
+libyami 0.3.0 release, work with libva 2015Q3 release
+=====================
++h265 decoder
++h265 encoder
++new mode -2 for yamidecode, it will output per frame md5 for decoded yuv
++some bug fix for vp8,vp9,h264 conformance.
++simplify configure.ac
+
+libyami 0.2.5 release, work with libva 2015Q2 release
+=====================
++update codec parser to latest version
++fix all compile warnings.
++add  CBR for h264 and vp8 encoder.
++add "SharedPtr<VideoFrame> getOutput()" to decoder
++fix one loop filter issue in vp8dec
++1 bug in NativeDisplayDrm
++handle annexb format codec data in h264 decoder
++one “deref NULL” bug in v4l2 encoder.
++self-register enc/dec/vpp with their factories.
++add a simple player to demo decoder api usage(200 lines)
++add grid application to demo MxN ways decode + dipslay
++select driver name base on decoder profile
+
+
+libyami 0.2.4 release
+=====================
++add vpp interface for c++
++fix momory leak, uinitilized variable and invalid read reported by valgrind
++3 bug fix for vp8 encoder.
++.gitignore file
++ update correct profile name for vp9 since libva updated.
++fix "resolution changed in v4l2 egl mode makes yami crash" issue
+-decode output dump can't gusss output fourcc from file extension
+
+
+
+libyami 0.2.3 release
+=====================
++add VIDIOC_G_CROP to io ctrl
++fix one ImagePtr leak issue, since ImagePtr hold DisplayPtr, it also leak VaapiDisplay
+
+libyami 0.2.2 release
+=====================
+
+features update
+---------------
++fix one include issue in capi header
++3 fixes for vp9 decoder and parser
++use cabac as default entropy mode for h264 encoder
++fix servral issues when we use v4l2 decoder in gles mode
+
+libyami 0.2.1 release
+=====================
+the main target of this release is bug fix, especially the busy waiting issue.
+
+features update
+---------------
++fix one busy waiting bug in v4l2decoder.
+     -It will drain out cpu resource even we pause the video.
++4 patches apply to fix vp9 conformance test.
++add fakedec, it's good start for performance measure.
++fix random crash bug when we use "yamidecoder -m -1"
+
+libyami 0.2.0 release
+=====================
+
+features update
+---------------
++ add VP9 decoder
++ add VP8 encoder
++ add JPEG encoder
++ add Demux support leverage libavformat,: --enable-avformat
+  - yamidecode runs ok when there is no xwindow rendering (-m -1/0)
+  - v4l2decode is ok when there is with or w/o rendering
+  - support libvaformat from the version installed in Ubuntu13.10
+  -	known issue: when there is video rendering, yamidecode blocks at
+    XGetWindowAttributes() after libva dlopen(i965_drv).
+    Add XInitThreads() make things worse. It is strange.
++ Fps update for "-m -1", we get stable performance data now
++ V4l2 fixes: seek, unconditionally stop
++ enable FFmpeg to use libyami for h264 decoding, create example player to
+  demonstrate it, especially on rendering video as texture through dma_buf
+  https://github.com/01org/player-ffmpeg-yami
+
+known issues
+---------------
+- for avformat support in yamidecode,  when there is video rendering,
+  yamidecode blocks at XGetWindowAttributes() after libva dlopen(i965_drv).
+  Add XInitThreads() make things worse. It is strange.
+  v4l2decode doesn't have such issue. (yamidecode is one thread application)
+
+thoughts on libyami (media framework and window system support)
+--------------------------------------------------
+these points are not our priority yet.
+
++ Wayland support
+  We did a lot to support Wayland before:
+  - add Wayland platform support in libva and driver, does hack to
+    copy wayland-drm protocol from mesa/egl
+  - add Wayland platform in middleware, gstreamer-vaapi for example
+
+  the detects are:
+  - so far, only plain rendering is supported: wl_surface_attach/wl_surface_damage;
+    texture video rendering is still a gap
+  - the shared wl_display/wl_window/wl_event_queue are complex and problematic
+
+  it should be much easier with dma_buf.
+  We neend't do anything special for native window system in either vaapi driver or
+  codec library. with dma_buf handle exported, application can draw the video
+  frame (dma_buf) by EGL/GLES, EGL handle native window system automatically(including
+  wrap it into a wl_buffer internally).
+
++ GStreamer support
+  We usually do a lot on hw video buffer sharing in GStreamer, hw video buffer are
+  platform dependent, but the framework requires to wrap them in a generic way. we do
+  a lot in decoder to wrap a platform dependent handle into a subclass of base
+  video buffer, then unwrap it in video sink. and tries best to hide hw detail when
+  a sw component request to access the frame data.
+
+  it becomes simple when hw codec support dma_buf, since dma_buf is Linux generic.
+  it is possible that hw video become not the 2nd class citizen any more. we don't
+  need additional wrapper in decoder side, and we don't need a special video sink
+  for each hw video type.
+
++ dma_buf rendering for legacy support
+  in the above ideas, we usually consider EGL/GLES rendering context, how about
+  legacy usage? it is simple as well.
+
+  DRI3 protocol support dma_buf, it means a dma_buf handle can be sent to server
+  for window update. Keith said mesa is using it, and on server side glamor handle
+  the dma_buf. the remaining gap is that YUV buffer hasn't been supported yet, but
+  not hard to add it.
+
+libyami 0.1.4 release
+=====================
+
+features update
+---------------
+    -   Additional fixes(most are thread race condition) for v4l2 wrapper (egl/gles)
+    -   Add glx support in v4l2 wrapper
+    -   Basic transcoding support: encoder test accepts input data from decoder output
+    -   Testscript is added, it supports one-run-for-all: with a folder including h264/vp8/jpeg/raw-ref,
+        we can test them in one run. It serves as BAT (basic acceptance test) for pull request merge.
+    -   Report fps in decode test, support decoding only test (skip rendering)
+    -   Vp8/jpeg are supported in v4l2 decoder as well
+    -   Decode test can be built/run without X11
+    -   Code refinement for decoder test output and encoder classes
+    -   dma_buf fixes, when video frame is exported as dma_buf, it renders well as texture
+    -   with additional patch for chrome:
+        V4L2VDA/V4L2VEA pass chrome video unit test
+        video playback in browser draft ok
+    -   for v4l2 wrapper, see: https://github.com/halleyzhao/yami-share/blob/master/Yami_V4L2_wrapper_for_Chrome.pdf
+
+known issues
+---------------
+    -   this release is fully tested by validation team
+    -   some jpeg file similarity <0.99 (~0.98) after decoding
+            https://github.com/01org/libyami/issues/108
+
+future release plan:
+====================
+    Dec: v0.2
+        jpeg encoder
+        vp9 decoder
+        vp8 encoder (depends on driver availability)
+        initial ffmpeg support
+
+    Feb'15: v0.3
+        unified input/output buffer of yami
+        transcoding support with unified input/output buffer
+        camera dma_buf support, camera with jpeg input
+        use yami in ffmpeg for hw codec
+
+    Future:
+        h265 decoder
+
+
+Libyami 0.1 release note
+===========================
+
+Libyami is core video library to accelerate decoding/encoding based on libva.
+Libyami can be treated as development kit for VAAPI. It is developed by C++ language, with simple/efficient APIs, without external dependencies.
+libyami targets two type of usage:
+    - Hardware accelerated codec is the major gap (there is existing media framework ), for example: Chromeos/Android, maybe ffmpeg.
+    - Usage is simple enough that codec is the major interest, for example: remote desktop client/server, video surveillance.
+So far H.264 decode/encode, VP8 and JPEG decode are supported. VP8/JPEG encode support is under development.
+
+There are rich tests/examples in yami for a try. The tests can run without Window system (X11/Wayland etc),
+some modes of video output are supported: including raw data dump and some modes of texture (TFP, drm flink name, dma_buf).
+
+More details see: https://github.com/01org/libyami/wiki
+
+Known issues:
+    some jpeg file similarity <0.99 (~0.98) after decoding
+        https://github.com/01org/libyami/issues/108
+    playback performance through gst-omx is not good:
+        https://github.com/01org/libyami/issues/34
+    Encodeing quality through gst-omx is not good:
+        https://github.com/01org/libyami/issues/36
+
+       legacy codec: mpeg2 decoder/encoder, vc1 decoder, mpeg4/h263 decoder/encoder

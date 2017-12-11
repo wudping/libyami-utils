@@ -1,0 +1,34 @@
+noinst_PROGRAMS = unittest
+
+unittest_SOURCES = \
+	unittest_main.cpp \
+	factory_unittest.cpp \
+	nalreader_unittest.cpp \
+	utils_unittest.cpp \
+	$(NULL)
+
+unittest_LDFLAGS = \
+	$(GTEST_LDFLAGS) \
+	$(AM_LDFLAGS) \
+	$(NULL)
+
+unittest_LDADD = \
+	libyami_common.la \
+	$(GTEST_LIBS) \
+	$(NULL)
+
+unittest_CPPFLAGS = \
+	$(GTEST_CPPFLAGS) \
+	$(LIBVA_CFLAGS) \
+	$(AM_CPPFLAGS) \
+	-I$(top_srcdir)/interface \
+	$(NULL)
+
+unittest_CXXFLAGS = \
+	$(GTEST_CXXFLAGS) \
+	$(AM_CXXFLAGS) \
+	$(NULL)
+
+check-local: unittest
+	$(builddir)/unittest
+

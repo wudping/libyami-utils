@@ -1,0 +1,30 @@
+noinst_PROGRAMS = unittest
+
+unittest_SOURCES = \
+	unittest_main.cpp \
+	$(NULL)
+
+unittest_LDFLAGS = \
+	$(GTEST_LDFLAGS) \
+	$(AM_LDFLAGS) \
+	$(NULL)
+
+unittest_LDADD = \
+	libyami_capi.la \
+	$(GTEST_LIBS) \
+	$(NULL)
+
+unittest_CPPFLAGS = \
+	$(GTEST_CPPFLAGS) \
+	$(AM_CPPFLAGS) \
+	-I$(top_srcdir)/interface \
+	$(NULL)
+
+unittest_CXXFLAGS = \
+	$(GTEST_CXXFLAGS) \
+	$(AM_CXXFLAGS) \
+	$(NULL)
+
+check-local: unittest
+	$(builddir)/unittest
+
