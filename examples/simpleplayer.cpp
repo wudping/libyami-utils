@@ -25,16 +25,28 @@
 #include <fcntl.h>
 #include <unistd.h>
 
+#ifdef __ENABLE_X11__
 #include <X11/Xlib.h>
 #include <va/va_x11.h>
+#endif
 #include <va/va_drm.h>
 #include <iostream>
 #include <sstream>
 #include <fstream>
+#include <sys/time.h>
 
 using namespace YamiMediaCodec;
 
 #define CPPPRINT(...) std::cout << __VA_ARGS__ << std::endl
+
+
+#define TIME_DURATION(end1, start1) ((end1.tv_sec * 1000 + end1.tv_usec / 1000) - (start1.tv_sec * 1000 + start1.tv_usec / 1000))
+
+#define TIME_MS(time_dd) (time_dd.tv_sec * 1000 + time_dd.tv_usec / 1000)
+
+#if (1)
+static struct timeval startx, endx;
+#endif
 
 typedef struct SimplePlayerParameter {
     string inputFile;
@@ -115,6 +127,12 @@ bool processCmdLine(int argc, char** argv, SimplePlayerParameter* parameters)
         ERROR("no input file.");
         return false;
     }
+#ifndef __ENABLE_X11__
+    if (! parameters->dumpToFile){
+        ERROR("x11 is disabled, so not support readering to X window!");
+        return false;
+    }
+#endif
     return true;
 }
 
@@ -182,9 +200,10 @@ public:
                     return false;
                 }
                 const VideoFormatInfo *formatInfo = m_decoder->getFormatInfo();
+#ifdef __ENABLE_X11__
                 if (!m_parameters.dumpToFile)
                     resizeWindow(formatInfo->width, formatInfo->height);
-
+#endif
                 m_width = formatInfo->width;
                 m_height = formatInfo->height;
                 //resend the buffer
@@ -215,10 +234,12 @@ public:
         return m_frameNum;
     }
     SimplePlayer()
-        : m_window(0)
-        , m_width(0)
+        : m_width(0)
         , m_height(0)
         , m_frameNum(0)
+#ifdef __ENABLE_X11__
+        , m_window(0)
+#endif
     {
         m_parameters.inputFile.clear();
         m_parameters.outputFile.clear();
@@ -238,9 +259,11 @@ public:
         if (m_nativeDisplay) {
             vaTerminate(m_vaDisplay);
         }
+#ifdef __ENABLE_X11__
         if (m_window) {
             XDestroyWindow(m_display.get(), m_window);
         }
+#endif
 
         if (m_ofs.is_open())
             m_ofs.close();
@@ -308,7 +331,6 @@ private:
 
     bool renderOutputs()
     {
-        VAStatus status = VA_STATUS_SUCCESS;
         do {
             SharedPtr<VideoFrame> frame = m_decoder->getOutput();
             if (!frame) {
@@ -336,15 +358,18 @@ private:
                 if (!writeNV12ToFile((VASurfaceID)frame->surface, m_width, m_height))
                     return false;
             }
+#ifdef __ENABLE_X11__
             else {
+                VAStatus status = VA_STATUS_SUCCESS;
                 status = vaPutSurface(m_vaDisplay, (VASurfaceID)frame->surface,
                     m_window, 0, 0, m_width, m_height, 0, 0, m_width, m_height,
                     NULL, 0, 0);
                 if (status != VA_STATUS_SUCCESS) {
                     ERROR("vaPutSurface return %d", status);
-                    break;
+                    return false;
                 }
             }
+#endif
             m_frameNum++;
             if (m_gotFistFrame)
                 break;
@@ -369,6 +394,7 @@ private:
 
             m_vaDisplay = vaGetDisplayDRM(m_drmFd);
         }
+#ifdef __ENABLE_X11__
         else {
             Display* display = XOpenDisplay(NULL);
             if (!display) {
@@ -378,6 +404,7 @@ private:
             m_display.reset(display, XCloseDisplay);
             m_vaDisplay = vaGetDisplay(m_display.get());
         }
+#endif
         return true;
     }
 
@@ -402,6 +429,7 @@ private:
         return true;
     }
 
+#ifdef __ENABLE_X11__
     void resizeWindow(int width, int height)
     {
         Display* display = m_display.get();
@@ -426,10 +454,14 @@ private:
         m_width = width;
         m_height = height;
     }
+#endif
+    
+#ifdef __ENABLE_X11__
     SharedPtr<Display> m_display;
+    Window   m_window;
+#endif
     SharedPtr<NativeDisplay> m_nativeDisplay;
     VADisplay m_vaDisplay;
-    Window   m_window;
     SharedPtr<IVideoDecoder> m_decoder;
     SharedPtr<DecodeInput> m_input;
     int m_width, m_height;
@@ -443,6 +475,9 @@ private:
 
 int main(int argc, char** argv)
 {
+#if (1)
+    gettimeofday(&startx, NULL);
+#endif
     SimplePlayer player;
     if (!player.init(argc, argv)) {
         ERROR("init player failed");
@@ -452,7 +487,11 @@ int main(int argc, char** argv)
         ERROR("run simple player failed");
         return -1;
     }
-    std::cout << "decoded frame number:" << player.getFrameNum() << std::endl;
+   // ERROR("decoded frame number:%d", player.getFrameNum());
+#if (1)
+    gettimeofday(&endx, NULL);
+    fprintf(stderr, "%s %s %d, start = %ld, end = %ld, time_duration = %ld ====\n", __FILE__, __FUNCTION__, __LINE__, TIME_MS(startx), TIME_MS(endx), TIME_DURATION(endx, startx));
+#endif
     return  0;
 }
 
