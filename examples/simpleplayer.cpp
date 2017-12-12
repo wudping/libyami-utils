@@ -224,7 +224,10 @@ public:
         inputBuffer.data = NULL;
         inputBuffer.size = 0;
         m_decoder->decode(&inputBuffer);
-        renderOutputs();
+        if (!(m_gotFistFrame
+                || (m_parameters.outputFrameNumber && m_frameNum >= m_parameters.outputFrameNumber))){
+            renderOutputs();
+        }
 
         m_decoder->stop();
         return true;
@@ -456,10 +459,6 @@ private:
     }
 #endif
     
-#ifdef __ENABLE_X11__
-    SharedPtr<Display> m_display;
-    Window   m_window;
-#endif
     SharedPtr<NativeDisplay> m_nativeDisplay;
     VADisplay m_vaDisplay;
     SharedPtr<IVideoDecoder> m_decoder;
@@ -471,6 +470,10 @@ private:
     FILE* m_fpOutput;
     std::ofstream m_ofs;
     bool m_gotFistFrame;
+#ifdef __ENABLE_X11__
+    SharedPtr<Display> m_display;
+    Window   m_window;
+#endif
 };
 
 int main(int argc, char** argv)
@@ -487,7 +490,7 @@ int main(int argc, char** argv)
         ERROR("run simple player failed");
         return -1;
     }
-   // ERROR("decoded frame number:%d", player.getFrameNum());
+    //fprintf(stderr, "decoded frame number:%d\n", player.getFrameNum());
 #if (1)
     gettimeofday(&endx, NULL);
     fprintf(stderr, "%s %s %d, start = %ld, end = %ld, time_duration = %ld ====\n", __FILE__, __FUNCTION__, __LINE__, TIME_MS(startx), TIME_MS(endx), TIME_DURATION(endx, startx));
