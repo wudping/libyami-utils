@@ -106,6 +106,7 @@ void VADisplayDeleter_dpwu(VADisplay* display)
     delete display;
 }
 
+#if (0)
 SharedPtr<VADisplay> createVADisplay_dpwu()
 {
     SharedPtr<VADisplay> display;
@@ -132,6 +133,7 @@ SharedPtr<VADisplay> createVADisplay_dpwu()
     display.reset(new VADisplay(vadisplay));
     return display;
 }
+#endif
 #endif
 
 typedef struct SimplePlayerParameter {
@@ -372,6 +374,33 @@ public:
     int m_getFramesNum;
     int m_needFramesNum;
 private:
+        
+    SharedPtr<VADisplay> createVADisplay_dpwu()
+    {
+        SharedPtr<VADisplay> display;
+        int fd = open("/dev/dri/renderD128", O_RDWR);
+        if (fd < 0) {
+            ERROR("can't open /dev/dri/renderD128, try to /dev/dri/card0");
+            fd = open("/dev/dri/card0", O_RDWR);
+        }
+        if (fd < 0) {
+            ERROR("can't open drm device");
+            return display;
+        }
+        VADisplay vadisplay = vaGetDisplayDRM(fd);
+        int majorVersion, minorVersion;
+            
+        VAStatus vaStatus = vaInitialize(vadisplay, &majorVersion, &minorVersion);
+        if (vaStatus != VA_STATUS_SUCCESS) {
+            ERROR("va init failed, status =  %d", vaStatus);
+            close(fd);
+            return display;
+        }
+        
+        //display.reset(new VADisplay(vadisplay), VADisplayDeleter_dpwu(fd));
+        display.reset(new VADisplay(vadisplay));
+        return display;
+    }
     bool renderOutputs(const SharedPtr<VideoFrame>& frame)
     {
         if(1){
@@ -460,7 +489,7 @@ private:
         char* buf;
         status = vaMapBuffer(*m_vaDisplayPtr, image.buf, (void**)&buf);
         if (status != VA_STATUS_SUCCESS) {
-            vaDestroyImage(m_vaDisplay, image.image_id);
+            vaDestroyImage(*m_vaDisplayPtr, image.image_id);
             ERROR("vaMapBuffer failed = %d", status);
             return false;
         }
