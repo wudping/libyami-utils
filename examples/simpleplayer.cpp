@@ -29,7 +29,36 @@
 
 
 #include <va/va_drm.h>
+
+
+
+
+
+#ifdef __ENABLE_X11__
+#include <X11/Xlib.h>
+#include <va/va_x11.h>
+#endif
+#include <va/va_drm.h>
+#include <iostream>
+#include <sstream>
+#include <fstream>
+#include <sys/time.h>
+
+
+
+
+
+
+
+
+
 using namespace YamiMediaCodec;
+
+
+#define CPPPRINT(...) std::cout << __VA_ARGS__ << std::endl
+
+
+
 
 //static int i_dpwu = 0;
 #define OUTPUT_DPWU 1
@@ -44,7 +73,10 @@ static struct timeval before_vainit, vainit, decode;
 #endif
 
 static uint32_t output_file = 0;
-static uint32_t output_all_file = 0;
+//static uint32_t output_all_file = 0;
+
+#define NEED_DELETE 1
+
 
 #if (OUTPUT_DPWU)
 
@@ -102,11 +134,104 @@ SharedPtr<VADisplay> createVADisplay_dpwu()
 }
 #endif
 
+typedef struct SimplePlayerParameter {
+    string inputFile;
+    string outputFile;
+    uint32_t outputFrameNumber;
+    uint16_t surfaceNumber;
+    uint32_t readSize;
+    bool dumpToFile;
+    bool getFirstFrame;
+    bool enableLowLatency;
+} SimplePlayerParameter;
+
+void printHelp(const char* app)
+{
+    CPPPRINT(app << " -i input.264 -m 0");
+    CPPPRINT("   -i media file to decode");
+    CPPPRINT("   -o specify the name of dumped output file");
+    CPPPRINT("   -r read size, only for 264, default 120539");
+    CPPPRINT("   -s surface number, only for 264, default 8");
+    CPPPRINT("   -l low latency");
+    CPPPRINT("   -g just to get surface of the first decoded frame");
+    CPPPRINT("   -n specify how many frames to be decoded");
+    CPPPRINT("   -m render mode, default 0");
+    CPPPRINT("      0: dump video frame to file in NV12 format [*]");
+    CPPPRINT("      1: render to X window [*]");
+}
+
+bool processCmdLine(int argc, char** argv, SimplePlayerParameter* parameters)
+{
+#if (1)
+    char opt;
+    while ((opt = getopt(argc, argv, "h?r:s:lgi:o:n:m:")) != -1) {
+        switch (opt) {
+        case 'h':
+        case '?':
+            printHelp(argv[0]);
+            return false;
+        case 'r':
+            parameters->readSize = atoi(optarg);
+            break;
+        case 's':
+            parameters->surfaceNumber = atoi(optarg);
+            break;
+        case 'l':
+            parameters->enableLowLatency = true;
+            break;
+        case 'g':
+            parameters->getFirstFrame = true;
+            break;
+        case 'i':
+            parameters->inputFile.assign(optarg);
+            break;
+        case 'o':
+            parameters->outputFile.assign(optarg);
+            break;
+        case 'n':
+            parameters->outputFrameNumber = atoi(optarg);
+            break;
+        case 'm':
+            parameters->dumpToFile = !atoi(optarg);
+            break;
+        default:
+            printHelp(argv[0]);
+            return false;
+        }
+    }
+
+    if (optind < argc) {
+        int indexOpt = optind;
+        CPPPRINT("unrecognized option: ");
+        while (indexOpt < argc)
+            CPPPRINT(argv[indexOpt++]);
+        CPPPRINT("");
+        return false;
+    }
+
+    if (parameters->inputFile.empty()) {
+        printHelp(argv[0]);
+        ERROR("no input file.");
+        return false;
+    }
+#ifndef __ENABLE_X11__
+    if (! parameters->dumpToFile){
+        ERROR("x11 is disabled, so not support readering to X window!");
+        return false;
+    }
+#endif
+#endif
+    return true;
+}
+
 class SimplePlayer
 {
 public:
     bool init(int argc, char** argv)
     {
+        if (!processCmdLine(argc, argv, &m_parameters))
+            return false;
+#if (0)
         m_fp = NULL;
         m_getFirst = 0;
         if(2 == argc) {
@@ -126,6 +251,25 @@ public:
             fprintf(stderr, "failed to open %s", argv[1]);
             return false;
         }
+#endif
+
+#if (NEED_DELETE)
+        m_fp = NULL;
+        m_getFirst = 0;
+        output_file = 1;
+#endif  
+
+        if (m_parameters.readSize)
+            m_input.reset(DecodeInput::create(m_parameters.inputFile.c_str(), m_parameters.readSize));
+        else
+            m_input.reset(DecodeInput::create(m_parameters.inputFile.c_str()));
+        if (!m_input) {
+            ERROR("failed to open file: %s.", m_parameters.inputFile.c_str());
+            return false;
+        }
+        INFO("input initialization finished with file: %s", m_parameters.inputFile.c_str());
+
+
 
         //init decoder
         m_decoder.reset(createVideoDecoder(m_input->getMimeType()), releaseVideoDecoder);
@@ -209,7 +353,7 @@ public:
     SimplePlayer():m_width(0), m_height(0) 
     {
         m_getFramesNum = 0;
-        m_needFramesNum = 0;
+        m_needFramesNum = 1;
         m_fileEnd = false;
         m_eos = false;
     }
@@ -353,6 +497,7 @@ private:
     //SharedPtr<DecodeOutput> m_output;
     bool m_eos;
     FILE* m_fp;
+    SimplePlayerParameter m_parameters;
 };
 
 int main(int argc, char** argv)
