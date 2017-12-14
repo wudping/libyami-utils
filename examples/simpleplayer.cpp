@@ -58,6 +58,16 @@ using namespace YamiMediaCodec;
 #define CPPPRINT(...) std::cout << __VA_ARGS__ << std::endl
 
 
+struct VADisplayTerminator_dpwu {
+    VADisplayTerminator_dpwu() {}
+    void operator()(VADisplay* display)
+    {
+        printf("dpwu  %s %s %d ====\n", __FILE__, __FUNCTION__, __LINE__);
+        vaTerminate(*display);
+        delete display;
+    }
+};
+
 
 struct VADisplayDeleter_dpwu
 {
@@ -67,7 +77,8 @@ struct VADisplayDeleter_dpwu
         printf("dpwu  %s %s %d ====\n", __FILE__, __FUNCTION__, __LINE__);
         vaTerminate(*display);
         delete display;
-        close(m_fd);
+        if(m_fd)
+            close(m_fd);
     }
 private:
     int m_fd;
@@ -354,6 +365,13 @@ public:
             if (m_fp)
                 fclose(m_fp);
         #endif
+        
+        m_vaDisplayPtr.reset();
+        if (m_window)
+            XDestroyWindow(m_display.get(), m_window);
+        if (m_display)
+            XCloseDisplay(m_display.get());
+        
     }
 public:
     uint32_t m_frameNum;
@@ -506,6 +524,10 @@ private:
             }
             m_display.reset(display, XCloseDisplay);
             m_vaDisplay = vaGetDisplay(m_display.get());
+            m_vaDisplayPtr.reset(new VADisplay(m_vaDisplay), VADisplayTerminator_dpwu());
+            //m_vaDisplayPtr.reset(new VADisplay(m_vaDisplay), VADisplayDeleter_dpwu(0));
+            //vaTerminate(m_vaDisplay);
+            //return false;
         }
 #endif
         return true;
@@ -548,6 +570,10 @@ private:
     int m_drmFd;
     std::ofstream m_ofs;
     bool m_gotFistFrame;
+#ifdef __ENABLE_X11__
+    SharedPtr<Display> m_display;
+    Window   m_window;
+#endif
 };
 
 int main(int argc, char** argv)
