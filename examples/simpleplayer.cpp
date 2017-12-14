@@ -181,8 +181,11 @@ public:
                                 continue;
                             else
                                 return false;
+                        } else{
+                            break;
                         }
                     }
+                    
                     status = m_decoder->decode(&inputBuffer);
                 }
                 if(status != DECODE_SUCCESS) {
@@ -193,7 +196,6 @@ public:
                 inputBuffer.data = NULL;
                 inputBuffer.size = 0;
                 m_decoder->decode(&inputBuffer);
-                m_fileEnd = true;
             }
         }
 
@@ -204,7 +206,7 @@ public:
     SimplePlayer():m_width(0), m_height(0) 
     {
         m_getFramesNum = 0;
-        m_needFramesNum = 10;
+        m_needFramesNum = 15;
         m_fileEnd = false;
     }
     ~SimplePlayer()
