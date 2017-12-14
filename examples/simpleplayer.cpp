@@ -27,13 +27,8 @@
 
 #include <va/va.h>
 
-#include "common/log.h"
-#include "common/lock.h"
-#include "vppinputoutput.h"
-#include "vppoutputencode.h"
-#include "vppinputdecode.h"
-#include "vppinputdecodecapi.h"
 
+#include <va/va_drm.h>
 using namespace YamiMediaCodec;
 
 //static int i_dpwu = 0;
@@ -67,22 +62,6 @@ struct ResolutionEntry {
     uint32_t heightMultiple[3];
 };
 
-#if (0)
-const static ResolutionEntry resolutionEntrys[] = {
-    { VA_FOURCC_I420, 3, { 2, 1, 1 }, { 2, 1, 1 } },
-    { VA_FOURCC_YV12, 3, { 2, 1, 1 }, { 2, 1, 1 } },
-    { VA_FOURCC_IMC3, 3, { 2, 1, 1 }, { 2, 1, 1 } },
-    { VA_FOURCC_422H, 3, { 2, 1, 1 }, { 2, 2, 2 } },
-    { VA_FOURCC_422V, 3, { 2, 2, 2 }, { 2, 1, 1 } },
-    { VA_FOURCC_444P, 3, { 2, 2, 2 }, { 2, 2, 2 } },
-    { VA_FOURCC_YUY2, 1, { 4 }, { 2 } },
-    { VA_FOURCC_UYVY, 1, { 4 }, { 2 } },
-    { VA_FOURCC_RGBX, 1, { 8 }, { 2 } },
-    { VA_FOURCC_RGBA, 1, { 8 }, { 2 } },
-    { VA_FOURCC_BGRX, 1, { 8 }, { 2 } },
-    { VA_FOURCC_BGRA, 1, { 8 }, { 2 } },
-};
-#endif
 
 #endif
 
@@ -99,12 +78,10 @@ SharedPtr<VADisplay> createVADisplay_dpwu()
 {
     SharedPtr<VADisplay> display;
     int fd = open("/dev/dri/renderD128", O_RDWR);
-    //printf("dpwu  %s %s %d, fd = %d ====\n", __FILE__, __FUNCTION__, __LINE__, fd);
     if (fd < 0) {
         ERROR("can't open /dev/dri/renderD128, try to /dev/dri/card0");
         fd = open("/dev/dri/card0", O_RDWR);
     }
-    //printf("dpwu  %s %s %d, fd = %d ====\n", __FILE__, __FUNCTION__, __LINE__, fd);
     if (fd < 0) {
         ERROR("can't open drm device");
         return display;
@@ -112,15 +89,12 @@ SharedPtr<VADisplay> createVADisplay_dpwu()
     VADisplay vadisplay = vaGetDisplayDRM(fd);
     int majorVersion, minorVersion;
         
-    //gettimeofday(&before_vainit, NULL);
     VAStatus vaStatus = vaInitialize(vadisplay, &majorVersion, &minorVersion);
     if (vaStatus != VA_STATUS_SUCCESS) {
         ERROR("va init failed, status =  %d", vaStatus);
         close(fd);
         return display;
     }
-    //gettimeofday(&vainit, NULL);
-    //printf("dpwu  %s %s %d, va init time_duration = %ld ====\n", __FILE__, __FUNCTION__, __LINE__, TIME_DURATION(vainit, before_vainit));
     
     //display.reset(new VADisplay(vadisplay), VADisplayDeleter_dpwu(fd));
     display.reset(new VADisplay(vadisplay));
@@ -171,12 +145,8 @@ public:
     bool run()
     {
         VideoConfigBuffer configBuffer;
-        //gettimeofday(&decode, NULL);
-        //printf("dpwu  %s %s %d, decode = %ld, decode_duration = %ld ====\n", __FILE__, __FUNCTION__, __LINE__, TIME_MS(decode), TIME_DURATION(decode, startx));
         
         memset(&configBuffer, 0, sizeof(configBuffer));
-        //gettimeofday(&decode, NULL);
-        //printf("dpwu  %s %s %d, decode = %ld, decode_duration = %ld ====\n", __FILE__, __FUNCTION__, __LINE__, TIME_MS(decode), TIME_DURATION(decode, startx));
         
         configBuffer.profile = VAProfileNone;
         const string codecData = m_input->getCodecData();
@@ -184,61 +154,59 @@ public:
             configBuffer.data = (uint8_t*)codecData.data();
             configBuffer.size = codecData.size();
         }
-        //gettimeofday(&decode, NULL);
-        //printf("dpwu  %s %s %d, decode = %ld, decode_duration = %ld ====\n", __FILE__, __FUNCTION__, __LINE__, TIME_MS(decode), TIME_DURATION(decode, startx));
-        
 
         Decode_Status status = m_decoder->start(&configBuffer);
         assert(status == DECODE_SUCCESS);
 
         VideoDecodeBuffer inputBuffer;
-        //gettimeofday(&decode, NULL);
-        //printf("dpwu  %s %s %d, decode = %ld, decode_duration = %ld ====\n", __FILE__, __FUNCTION__, __LINE__, TIME_MS(decode), TIME_DURATION(decode, startx));
-        
-        while (m_input->getNextDecodeUnit(inputBuffer)) {
-            //gettimeofday(&decode, NULL);
-            //printf("dpwu  %s %s %d, decode = %ld, decode_duration = %ld ====\n", __FILE__, __FUNCTION__, __LINE__, TIME_MS(decode), TIME_DURATION(decode, startx));
-            status = m_decoder->decode(&inputBuffer);
-            //gettimeofday(&decode, NULL);
-            //printf("dpwu  %s %s %d, decode = %ld, decode_duration = %ld ====\n", __FILE__, __FUNCTION__, __LINE__, TIME_MS(decode), TIME_DURATION(decode, startx));
-            if (DECODE_FORMAT_CHANGE == status) {
-                //drain old buffers
-                renderOutputs();
-                //m_decoder->getFormatInfo();
-                //resizeWindow(formatInfo->width, formatInfo->height);
-                //resend the buffer
+        SharedPtr<VideoFrame> frame;
+
+        while((!m_needFramesNum) || (m_needFramesNum > 0 && m_getFramesNum < m_needFramesNum)){
+            frame = m_decoder->getOutput();
+            if (frame){
+                if(renderOutputs(frame))
+                    continue;
+                else
+                    return false;
+            }
+
+            if (m_input->getNextDecodeUnit(inputBuffer)) {
                 status = m_decoder->decode(&inputBuffer);
-            }
-            if(status == DECODE_SUCCESS) {
-                renderOutputs();
-                //gettimeofday(&decode, NULL);
-                //printf("dpwu  %s %s %d, decode = %ld, decode_duration = %ld ====\n", __FILE__, __FUNCTION__, __LINE__, TIME_MS(decode), TIME_DURATION(decode, startx));
+                if (DECODE_FORMAT_CHANGE == status) {
+                    //drain old buffers
+                    while((!m_needFramesNum) || (m_needFramesNum > 0 && m_getFramesNum < m_needFramesNum)){
+                        frame = m_decoder->getOutput();
+                        if (frame){
+                            if(renderOutputs(frame))
+                                continue;
+                            else
+                                return false;
+                        }
+                    }
+                    status = m_decoder->decode(&inputBuffer);
+                }
+                if(status != DECODE_SUCCESS) {
+                    ERROR("decode error status = %d", status);
+                    break;
+                }
             } else {
-                ERROR("decode error status = %d", status);
-                break;
-            }
-            //printf("dpwu  %s %s %d, m_getFirst = %d, i_dpwu = %d ====\n", __FILE__, __FUNCTION__, __LINE__, m_getFirst, i_dpwu);
-            if(m_getFirst){
-                break;
+                inputBuffer.data = NULL;
+                inputBuffer.size = 0;
+                m_decoder->decode(&inputBuffer);
+                m_fileEnd = true;
             }
         }
-
-        if(! m_getFirst){
-            inputBuffer.data = NULL;
-            inputBuffer.size = 0;
-            m_decoder->decode(&inputBuffer);
-            renderOutputs();
-        }
-
-
 
         m_decoder->stop();
-        //gettimeofday(&decode, NULL);
-        //printf("dpwu  %s %s %d, decode = %ld, decode_duration = %ld ====\n", __FILE__, __FUNCTION__, __LINE__, TIME_MS(decode), TIME_DURATION(decode, startx));
     
         return true;
     }
-    SimplePlayer():m_width(0), m_height(0) {}
+    SimplePlayer():m_width(0), m_height(0) 
+    {
+        m_getFramesNum = 0;
+        m_needFramesNum = 10;
+        m_fileEnd = false;
+    }
     ~SimplePlayer()
     {
         if (m_nativeDisplay) {
@@ -250,42 +218,34 @@ public:
                 fclose(m_fp);
         #endif
     }
+public:
+    int m_getFramesNum;
+    int m_needFramesNum;
 private:
-    void renderOutputs()
+    bool renderOutputs(const SharedPtr<VideoFrame>& frame)
     {
-        do {
-            SharedPtr<VideoFrame> frame = m_decoder->getOutput();
-            if (!frame)
-                return ;
-            else{
-                if(output_file){
-                    if (output_file)
-                        if(! m_fp){
-                            char file_name[128];
-                            sprintf (file_name, "dd_sim_nv12_%dx%d.yuv", frame->crop.width, frame->crop.height);
-//                            fprintf(stderr, "%s %s %d, file_name = %s ====\n", __FILE__, __FUNCTION__, __LINE__, file_name);
-                            m_fp = fopen(file_name, "wb");
-                        }
-                    if (m_fp){
-                        doIO(m_fp, frame);
-                        if(! output_all_file){
-                            m_getFirst = 1;
-                            break;
-                        }
+        if(1){
+            if(output_file){
+                if(! m_fp){
+                    char file_name[128];
+                    sprintf (file_name, "dd_sim_nv12_%dx%d.yuv", frame->crop.width, frame->crop.height);
+                    fprintf(stderr, "%s %s %d, file_name = %s ====\n", __FILE__, __FUNCTION__, __LINE__, file_name);
+                    m_fp = fopen(file_name, "wb");
+                }
+                if (m_fp){
+                    doIO(m_fp, frame);
+                    /*
+                    if(! output_all_file){
+                        m_getFirst = 1;
+                        return true;
                     }
+                    */
                 }
-                else{
-                    m_getFirst = 1;
-                    break;
-                }
-                    
-                #if (0)
-                gettimeofday(&end, NULL);
-                time_duration = TIME_DURATION(end, start);
-                printf("dpwu  %s %s %d, time_duration = %ld ====\n", __FILE__, __FUNCTION__, __LINE__, time_duration);
-                #endif
             }
-        } while (1);
+            m_getFramesNum++;
+        }
+        
+        return true;
     }
     
     bool initDisplay()
@@ -323,19 +283,6 @@ private:
             planes = 2;
             return true;
         }
-        #if (0)
-        for (size_t i = 0; i < N_ELEMENTS(resolutionEntrys); i++) {
-            const ResolutionEntry& e = resolutionEntrys[i];
-            if (e.fourcc == fourcc) {
-                planes = e.planes;
-                getPlaneLength(pixelWidth, planes, e.widthMultiple, width);
-                getPlaneLength(pixelHeight, planes, e.heightMultiple, height);
-                return true;
-            }
-        }
-        ERROR("do not support this format, fourcc %.4s", (char*)&fourcc);
-        planes = 0;
-        #endif
         return false;
     }
 
@@ -396,6 +343,7 @@ private:
     SharedPtr<DecodeInput> m_input;
     int m_width, m_height;
     int m_getFirst;
+    bool m_fileEnd;
     //SharedPtr<DecodeOutput> m_output;
     FILE* m_fp;
 };
@@ -417,6 +365,8 @@ int main(int argc, char** argv)
         ERROR("run simple player failed");
         return -1;
     }    
+    
+    printf("dpwu  %s %s %d, player.m_getFramesNum = %d ====\n", __FILE__, __FUNCTION__, __LINE__, player.m_getFramesNum);
 #if (0)
     gettimeofday(&endx, NULL);
     fprintf(stderr, "%s %s %d, start = %ld, end = %ld, time_duration = %ld ====\n", __FILE__, __FUNCTION__, __LINE__, TIME_MS(startx), TIME_MS(endx), TIME_DURATION(endx, startx));
