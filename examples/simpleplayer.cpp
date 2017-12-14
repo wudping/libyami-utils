@@ -349,11 +349,21 @@ public:
     }
     ~SimplePlayer()
     {
+        m_decoder.reset();
         #if (OUTPUT_DPWU)
         if (output_file)
             if (m_fp)
                 fclose(m_fp);
         #endif
+        if (m_nativeDisplay) {
+            vaTerminate(m_vaDisplay);
+        }
+        
+#ifdef __ENABLE_X11__
+        if (m_window) {
+            XDestroyWindow(m_display.get(), m_window);
+        }
+#endif
     }
 public:
     uint32_t m_frameNum;
@@ -495,7 +505,7 @@ private:
 
             m_vaDisplay = vaGetDisplayDRM(m_drmFd);
                 
-            m_vaDisplayPtr.reset(new VADisplay(m_vaDisplay), VADisplayDeleter_dpwu(m_drmFd));
+            //m_vaDisplayPtr.reset(new VADisplay(m_vaDisplay), VADisplayDeleter_dpwu(m_drmFd));
         }
 #ifdef __ENABLE_X11__
         else {
@@ -548,6 +558,11 @@ private:
     int m_drmFd;
     std::ofstream m_ofs;
     bool m_gotFistFrame;
+    #ifdef __ENABLE_X11__    
+    SharedPtr<Display> m_display;    
+    Window   m_window;
+    #endif
+    
 };
 
 int main(int argc, char** argv)
