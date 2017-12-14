@@ -106,34 +106,6 @@ void VADisplayDeleter_dpwu(VADisplay* display)
     delete display;
 }
 
-#if (0)
-SharedPtr<VADisplay> createVADisplay_dpwu()
-{
-    SharedPtr<VADisplay> display;
-    int fd = open("/dev/dri/renderD128", O_RDWR);
-    if (fd < 0) {
-        ERROR("can't open /dev/dri/renderD128, try to /dev/dri/card0");
-        fd = open("/dev/dri/card0", O_RDWR);
-    }
-    if (fd < 0) {
-        ERROR("can't open drm device");
-        return display;
-    }
-    VADisplay vadisplay = vaGetDisplayDRM(fd);
-    int majorVersion, minorVersion;
-        
-    VAStatus vaStatus = vaInitialize(vadisplay, &majorVersion, &minorVersion);
-    if (vaStatus != VA_STATUS_SUCCESS) {
-        ERROR("va init failed, status =  %d", vaStatus);
-        close(fd);
-        return display;
-    }
-    
-    //display.reset(new VADisplay(vadisplay), VADisplayDeleter_dpwu(fd));
-    display.reset(new VADisplay(vadisplay));
-    return display;
-}
-#endif
 #endif
 
 typedef struct SimplePlayerParameter {
@@ -233,27 +205,6 @@ public:
     {
         if (!processCmdLine(argc, argv, &m_parameters))
             return false;
-#if (0)
-        m_fp = NULL;
-        m_getFirst = 0;
-        if(2 == argc) {
-            output_file = 1;
-            output_all_file = 1;
-        }else if (3 == argc) {
-            output_file = atoi(argv[2]);
-        }else{
-            printf("usage: \n");
-            printf("decode 1 frame, not dump: simpleplayer xxx.264 0\n");
-            printf("decode and dump 1 frame: simpleplayer xxx.264 1\n");
-            printf("decode and dump all frames: simpleplayer xxx.264\n");
-            return false;
-        }
-        m_input.reset(DecodeInput::create(argv[1]));
-        if (!m_input) {
-            fprintf(stderr, "failed to open %s", argv[1]);
-            return false;
-        }
-#endif
 
 #if (NEED_DELETE)
         m_fp = NULL;
@@ -384,35 +335,6 @@ public:
     int m_needFramesNum;
     int m_frameNum;
 private:
-        
-    SharedPtr<VADisplay> createVADisplay_dpwu()
-    {
-        SharedPtr<VADisplay> display;
-        int fd = open("/dev/dri/renderD128", O_RDWR);
-        if (fd < 0) {
-            ERROR("can't open /dev/dri/renderD128, try to /dev/dri/card0");
-            fd = open("/dev/dri/card0", O_RDWR);
-        }
-        if (fd < 0) {
-            ERROR("can't open drm device");
-            return display;
-        }
-        VADisplay vadisplay = vaGetDisplayDRM(fd);
-        int majorVersion, minorVersion;
-            
-        VAStatus vaStatus = vaInitialize(vadisplay, &majorVersion, &minorVersion);
-        if (vaStatus != VA_STATUS_SUCCESS) {
-            ERROR("va init failed, status =  %d", vaStatus);
-            close(fd);
-            return display;
-        }
-        
-        //display.reset(new VADisplay(vadisplay), VADisplayDeleter_dpwu(fd));
-        display.reset(new VADisplay(vadisplay));
-        return display;
-    }
-
-
     bool getPlaneResolution_NV12(uint32_t pixelWidth, uint32_t pixelHeight, uint32_t byteWidth[3], uint32_t byteHeight[3])
     {
         int w = pixelWidth;
@@ -511,46 +433,6 @@ private:
         return true;
     }
 
-#if (0)
-    bool renderOutputs(const SharedPtr<VideoFrame>& frame)
-    {
-        if(1){
-            if(output_file){
-                if(! m_fp){
-                    char file_name[128];
-                    sprintf (file_name, "dd_sim_nv12_%dx%d.yuv", frame->crop.width, frame->crop.height);
-                    fprintf(stderr, "%s %s %d, file_name = %s ====\n", __FILE__, __FUNCTION__, __LINE__, file_name);
-                    m_fp = fopen(file_name, "wb");
-                }
-                if (m_fp){
-                    doIO(m_fp, frame);
-                    /*
-                    if(! output_all_file){
-                        m_getFirst = 1;
-                        return true;
-                    }
-                    */
-                }
-            }
-            m_frameNum++;
-        }
-        
-        return true;
-    }
-#endif
-
-    #if (0)
-    bool initDisplay()
-    {        
-        m_vaDisplayPtr = createVADisplay_dpwu();
-        m_vaDisplay = *m_vaDisplayPtr;//m_vaDisplayPtr.get();
-        m_nativeDisplay.reset(new NativeDisplay);
-        m_nativeDisplay->type = NATIVE_DISPLAY_VA;
-        m_nativeDisplay->handle = (intptr_t)*m_vaDisplayPtr;
-        return true;
-    }
-    #endif
-
     bool createVadisplay()
     {
         if (m_parameters.dumpToFile) {
@@ -601,135 +483,6 @@ private:
         return true;
     }
 
-#if (OUTPUT_DPWU)
-    /* l is length in pixel*/
-    /* length[] are length in each plane*/
-    static void getPlaneLength(uint32_t l, uint32_t plane, const uint32_t multiple[3], uint32_t length[3])
-    {
-        for (uint32_t i = 0; i < plane; i++) {
-            length[i] = (l * multiple[i] + 1) >> 1;
-        }
-    }
-    
-    bool getPlaneResolution(uint32_t fourcc, uint32_t pixelWidth, uint32_t pixelHeight, uint32_t byteWidth[3], uint32_t byteHeight[3],  uint32_t& planes)
-    {
-        int w = pixelWidth;
-        int h = pixelHeight;
-        uint32_t* width = byteWidth;
-        uint32_t* height = byteHeight;
-        //NV12 is special since it  need add one for width[1] when w is odd
-        if (fourcc == VA_FOURCC_NV12) {
-            width[0] = w;
-            height[0] = h;
-            width[1] = w + (w & 1);
-            height[1] = (h + 1) >> 1;
-            planes = 2;
-            return true;
-        }
-        return false;
-    }
-    
-    
-#if (1)
-        bool doIO(FILE* fp, const SharedPtr<VideoFrame>& frame)
-        {
-            if (!fp || !frame) {
-                ERROR("invalid param");
-                return false;
-            }
-            VASurfaceID surface = (VASurfaceID)frame->surface;
-            VAImage image;
-    
-            VAStatus status = vaDeriveImage(m_vaDisplay,surface,&image);
-            if (status != VA_STATUS_SUCCESS) {
-                ERROR("vaDeriveImage failed = %d", status);
-                return false;
-            }
-            uint32_t byteWidth[3], byteHeight[3], planes;
-            //image.width is not equal to frame->crop.width.
-            //for supporting VPG Driver, use YV12 to replace I420
-            if (!getPlaneResolution(frame->fourcc, frame->crop.width, frame->crop.height, byteWidth, byteHeight, planes)) {
-                ERROR("get plane reoslution failed for %x, %dx%d", frame->fourcc, frame->crop.width, frame->crop.height);
-                return false;
-            }
-            char* buf;
-            status = vaMapBuffer(m_vaDisplay, image.buf, (void**)&buf);
-            if (status != VA_STATUS_SUCCESS) {
-                vaDestroyImage(m_vaDisplay, image.image_id);
-                ERROR("vaMapBuffer failed = %d", status);
-                return false;
-            }
-            bool ret = true;
-            for (uint32_t i = 0; i < planes; i++) {
-                char* ptr = buf + image.offsets[i];
-                int w = byteWidth[i];
-                for (uint32_t j = 0; j < byteHeight[i]; j++) {
-                    //ret = m_io(ptr, w, fp);
-                    ret = fwrite(ptr, 1, w, fp);
-                    if (!ret)
-                        goto out;
-                    ptr += image.pitches[i];
-                }
-            }
-        out:
-            vaUnmapBuffer(m_vaDisplay, image.buf);
-            vaDestroyImage(m_vaDisplay, image.image_id);
-            return ret;
-    
-        }
-#endif
-
-#if (0)
-    bool doIO(FILE* fp, const SharedPtr<VideoFrame>& frame)
-    {
-        if (!fp || !frame) {
-            ERROR("invalid param");
-            return false;
-        }
-        VASurfaceID surface = (VASurfaceID)frame->surface;
-        VAImage image;
-
-        VAStatus status = vaDeriveImage(*m_vaDisplayPtr,surface,&image);
-        if (status != VA_STATUS_SUCCESS) {
-            ERROR("vaDeriveImage failed = %d", status);
-            return false;
-        }
-        uint32_t byteWidth[3], byteHeight[3], planes;
-        //image.width is not equal to frame->crop.width.
-        //for supporting VPG Driver, use YV12 to replace I420
-        if (!getPlaneResolution(frame->fourcc, frame->crop.width, frame->crop.height, byteWidth, byteHeight, planes)) {
-            ERROR("get plane reoslution failed for %x, %dx%d", frame->fourcc, frame->crop.width, frame->crop.height);
-            return false;
-        }
-        char* buf;
-        status = vaMapBuffer(*m_vaDisplayPtr, image.buf, (void**)&buf);
-        if (status != VA_STATUS_SUCCESS) {
-            vaDestroyImage(*m_vaDisplayPtr, image.image_id);
-            ERROR("vaMapBuffer failed = %d", status);
-            return false;
-        }
-        bool ret = true;
-        for (uint32_t i = 0; i < planes; i++) {
-            char* ptr = buf + image.offsets[i];
-            int w = byteWidth[i];
-            for (uint32_t j = 0; j < byteHeight[i]; j++) {
-                //ret = m_io(ptr, w, fp);
-                ret = fwrite(ptr, 1, w, fp);
-                if (!ret)
-                    goto out;
-                ptr += image.pitches[i];
-            }
-        }
-    out:
-        vaUnmapBuffer(*m_vaDisplayPtr, image.buf);
-        vaDestroyImage(*m_vaDisplayPtr, image.image_id);
-        return ret;
-
-    }
-#endif
-
-
-#endif
 
     SharedPtr<NativeDisplay> m_nativeDisplay;
     VADisplay m_vaDisplay;
