@@ -168,6 +168,8 @@ public:
                     continue;
                 else
                     return false;
+            }else if(m_eos){
+                break;
             }
 
             if (m_input->getNextDecodeUnit(inputBuffer)) {
@@ -196,6 +198,7 @@ public:
                 inputBuffer.data = NULL;
                 inputBuffer.size = 0;
                 m_decoder->decode(&inputBuffer);
+                m_eos = true;
             }
         }
 
@@ -206,8 +209,9 @@ public:
     SimplePlayer():m_width(0), m_height(0) 
     {
         m_getFramesNum = 0;
-        m_needFramesNum = 15;
+        m_needFramesNum = 0;
         m_fileEnd = false;
+        m_eos = false;
     }
     ~SimplePlayer()
     {
@@ -347,6 +351,7 @@ private:
     int m_getFirst;
     bool m_fileEnd;
     //SharedPtr<DecodeOutput> m_output;
+    bool m_eos;
     FILE* m_fp;
 };
 
