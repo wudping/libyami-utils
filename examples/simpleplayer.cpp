@@ -59,6 +59,20 @@ using namespace YamiMediaCodec;
 
 
 
+struct VADisplayDeleter_dpwu
+{
+    VADisplayDeleter_dpwu(int fd):m_fd(fd) {}
+    void operator()(VADisplay* display)
+    {
+        printf("dpwu  %s %s %d ====\n", __FILE__, __FUNCTION__, __LINE__);
+        vaTerminate(*display);
+        delete display;
+        close(m_fd);
+    }
+private:
+    int m_fd;
+};
+
 
 //static int i_dpwu = 0;
 #define OUTPUT_DPWU 1
@@ -100,11 +114,6 @@ struct ResolutionEntry {
 
 #if (1)
 int show_h264();
-void VADisplayDeleter_dpwu(VADisplay* display)
-{
-    vaTerminate(*display);
-    delete display;
-}
 
 #endif
 
@@ -340,9 +349,6 @@ public:
     }
     ~SimplePlayer()
     {
-        if (m_nativeDisplay) {
-            vaTerminate(&m_vaDisplay);
-        }
         #if (OUTPUT_DPWU)
         if (output_file)
             if (m_fp)
@@ -488,6 +494,8 @@ private:
             }
 
             m_vaDisplay = vaGetDisplayDRM(m_drmFd);
+                
+            m_vaDisplayPtr.reset(new VADisplay(m_vaDisplay), VADisplayDeleter_dpwu(m_drmFd));
         }
 #ifdef __ENABLE_X11__
         else {
@@ -560,7 +568,7 @@ int main(int argc, char** argv)
         return -1;
     }    
     
-    //printf("dpwu  %s %s %d, player.m_frameNum = %d ====\n", __FILE__, __FUNCTION__, __LINE__, player.m_frameNum);
+    printf("dpwu  %s %s %d, player.m_frameNum = %d ====\n", __FILE__, __FUNCTION__, __LINE__, player.m_frameNum);
 #if (0)
     gettimeofday(&endx, NULL);
     fprintf(stderr, "%s %s %d, start = %ld, end = %ld, time_duration = %ld ====\n", __FILE__, __FUNCTION__, __LINE__, TIME_MS(startx), TIME_MS(endx), TIME_DURATION(endx, startx));
