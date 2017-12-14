@@ -252,15 +252,26 @@ public:
             configBuffer.size = codecData.size();
         }
 
+        configBuffer.enableLowLatency = m_parameters.enableLowLatency;
+        if (m_parameters.surfaceNumber) {
+            configBuffer.noNeedExtraSurface = true;
+            configBuffer.flag |= HAS_SURFACE_NUMBER;
+            configBuffer.surfaceNumber = m_parameters.surfaceNumber;
+        }
+
         Decode_Status status = m_decoder->start(&configBuffer);
         assert(status == DECODE_SUCCESS);
 
         VideoDecodeBuffer inputBuffer;
         SharedPtr<VideoFrame> frame;
 
-        while((!m_needFramesNum) || (m_needFramesNum > 0 && m_frameNum < m_needFramesNum)){
+        while((!m_parameters.outputFrameNumber) || (m_parameters.outputFrameNumber > 0 && m_frameNum < m_parameters.outputFrameNumber)){
             frame = m_decoder->getOutput();
             if (frame){
+                if(m_parameters.getFirstFrame){
+                    m_frameNum++;
+                    break;
+                }
                 if(renderOutputs(frame))
                     continue;
                 else
@@ -273,7 +284,7 @@ public:
                 status = m_decoder->decode(&inputBuffer);
                 if (DECODE_FORMAT_CHANGE == status) {
                     //drain old buffers
-                    while((!m_needFramesNum) || (m_needFramesNum > 0 && m_frameNum < m_needFramesNum)){
+                    while((!m_parameters.outputFrameNumber) || (m_parameters.outputFrameNumber > 0 && m_frameNum < m_parameters.outputFrameNumber)){
                         frame = m_decoder->getOutput();
                         if (frame){
                             if(renderOutputs(frame))
@@ -284,6 +295,14 @@ public:
                             break;
                         }
                     }
+                    
+                    const VideoFormatInfo *formatInfo = m_decoder->getFormatInfo();
+#ifdef __ENABLE_X11__
+                    if (!m_parameters.dumpToFile)
+                        resizeWindow(formatInfo->width, formatInfo->height);
+#endif
+                    m_width = formatInfo->width;
+                    m_height = formatInfo->height;
                     
                     status = m_decoder->decode(&inputBuffer);
                 }
@@ -315,7 +334,6 @@ public:
         m_parameters.enableLowLatency = false;
         
         m_frameNum = 0;
-        m_needFramesNum = 1;
         m_fileEnd = false;
         m_eos = false;
         m_frameNum = 0;
@@ -332,9 +350,32 @@ public:
         #endif
     }
 public:
-    int m_needFramesNum;
-    int m_frameNum;
+    uint32_t m_frameNum;
 private:
+#ifdef __ENABLE_X11__
+        void resizeWindow(int width, int height)
+        {
+            Display* display = m_display.get();
+            if (m_window) {
+            //todo, resize window;
+            } else {
+                DefaultScreen(display);
+    
+                XSetWindowAttributes x11WindowAttrib;
+                x11WindowAttrib.event_mask = KeyPressMask;
+                m_window = XCreateWindow(display, DefaultRootWindow(display),
+                    0, 0, width, height, 0, CopyFromParent, InputOutput,
+                    CopyFromParent, CWEventMask, &x11WindowAttrib);
+                XMapWindow(display, m_window);
+            }
+            XSync(display, false);
+            {
+                DEBUG("m_window=%lu", m_window);
+                XWindowAttributes wattr;
+                XGetWindowAttributes(display, m_window, &wattr);
+            }
+        }
+#endif
     bool getPlaneResolution_NV12(uint32_t pixelWidth, uint32_t pixelHeight, uint32_t byteWidth[3], uint32_t byteHeight[3])
     {
         int w = pixelWidth;
@@ -357,7 +398,7 @@ private:
             ERROR("No output file for NV12.\n");
             return false;
         }
-
+        
         VAImage image;
         VAStatus status = vaDeriveImage(m_vaDisplay, surface, &image);
         if (status != VA_STATUS_SUCCESS) {
@@ -519,7 +560,7 @@ int main(int argc, char** argv)
         return -1;
     }    
     
-    printf("dpwu  %s %s %d, player.m_frameNum = %d ====\n", __FILE__, __FUNCTION__, __LINE__, player.m_frameNum);
+    //printf("dpwu  %s %s %d, player.m_frameNum = %d ====\n", __FILE__, __FUNCTION__, __LINE__, player.m_frameNum);
 #if (0)
     gettimeofday(&endx, NULL);
     fprintf(stderr, "%s %s %d, start = %ld, end = %ld, time_duration = %ld ====\n", __FILE__, __FUNCTION__, __LINE__, TIME_MS(startx), TIME_MS(endx), TIME_DURATION(endx, startx));
