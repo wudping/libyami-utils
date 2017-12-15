@@ -20,13 +20,11 @@
 #include "tests/decodeinput.h"
 #include "common/log.h"
 #include <Yami.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <fcntl.h>
 #include <unistd.h>
 
 #include <va/va.h>
-
 
 #ifdef __ENABLE_X11__
 #include <X11/Xlib.h>
@@ -448,7 +446,6 @@ private:
         m_nativeDisplay->handle = (intptr_t)m_vaDisplay;
         return true;
     }
-
 
     SharedPtr<NativeDisplay> m_nativeDisplay;
     VADisplay m_vaDisplay;
