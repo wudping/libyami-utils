@@ -28,12 +28,6 @@
 #include <va/va.h>
 
 
-#include <va/va_drm.h>
-
-
-
-
-
 #ifdef __ENABLE_X11__
 #include <X11/Xlib.h>
 #include <va/va_x11.h>
@@ -44,21 +38,11 @@
 #include <fstream>
 #include <sys/time.h>
 
-
-
-
-
-
-
-
-
 using namespace YamiMediaCodec;
-
 
 #define CPPPRINT(...) std::cout << __VA_ARGS__ << std::endl
 
-
-
+#if (0)
 struct VADisplayDeleter_dpwu
 {
     VADisplayDeleter_dpwu(int fd):m_fd(fd) {}
@@ -72,6 +56,7 @@ struct VADisplayDeleter_dpwu
 private:
     int m_fd;
 };
+#endif
 
 
 //static int i_dpwu = 0;
@@ -86,7 +71,6 @@ static struct timeval before_vainit, vainit, decode;
 #define TIME_MS(time_dd) (time_dd.tv_sec * 1000 + time_dd.tv_usec / 1000)
 #endif
 
-static uint32_t output_file = 0;
 //static uint32_t output_all_file = 0;
 
 #define NEED_DELETE 1
@@ -108,12 +92,6 @@ struct ResolutionEntry {
     uint32_t heightMultiple[3];
 };
 
-
-#endif
-
-
-#if (1)
-int show_h264();
 
 #endif
 
@@ -145,7 +123,6 @@ void printHelp(const char* app)
 
 bool processCmdLine(int argc, char** argv, SimplePlayerParameter* parameters)
 {
-#if (1)
     char opt;
     while ((opt = getopt(argc, argv, "h?r:s:lgi:o:n:m:")) != -1) {
         switch (opt) {
@@ -203,23 +180,17 @@ bool processCmdLine(int argc, char** argv, SimplePlayerParameter* parameters)
         return false;
     }
 #endif
-#endif
     return true;
 }
 
 class SimplePlayer
 {
 public:
+    uint64_t getFrameNum(){ return m_frameNum; }
     bool init(int argc, char** argv)
     {
         if (!processCmdLine(argc, argv, &m_parameters))
             return false;
-
-#if (NEED_DELETE)
-        m_fp = NULL;
-        m_getFirst = 0;
-        output_file = 1;
-#endif  
 
         if (m_parameters.readSize)
             m_input.reset(DecodeInput::create(m_parameters.inputFile.c_str(), m_parameters.readSize));
@@ -230,8 +201,6 @@ public:
             return false;
         }
         INFO("input initialization finished with file: %s", m_parameters.inputFile.c_str());
-
-
 
         //init decoder
         m_decoder.reset(createVideoDecoder(m_input->getMimeType()), releaseVideoDecoder);
@@ -312,7 +281,7 @@ public:
 #endif
                     m_width = formatInfo->width;
                     m_height = formatInfo->height;
-                    
+
                     status = m_decoder->decode(&inputBuffer);
                 }
                 if(status != DECODE_SUCCESS) {
@@ -341,32 +310,25 @@ public:
         m_parameters.dumpToFile = true;
         m_parameters.getFirstFrame = false;
         m_parameters.enableLowLatency = false;
-        
+
         m_frameNum = 0;
-        m_fileEnd = false;
         m_eos = false;
-        m_frameNum = 0;
+        m_drmFd = -1;
     }
     ~SimplePlayer()
     {
         m_decoder.reset();
-        #if (OUTPUT_DPWU)
-        if (output_file)
-            if (m_fp)
-                fclose(m_fp);
-        #endif
         if (m_nativeDisplay) {
             vaTerminate(m_vaDisplay);
         }
-        
 #ifdef __ENABLE_X11__
         if (m_window) {
             XDestroyWindow(m_display.get(), m_window);
         }
 #endif
+        if (m_drmFd >= 0)
+            close(m_drmFd);
     }
-public:
-    uint32_t m_frameNum;
 private:
 #ifdef __ENABLE_X11__
         void resizeWindow(int width, int height)
@@ -504,8 +466,6 @@ private:
             }
 
             m_vaDisplay = vaGetDisplayDRM(m_drmFd);
-                
-            //m_vaDisplayPtr.reset(new VADisplay(m_vaDisplay), VADisplayDeleter_dpwu(m_drmFd));
         }
 #ifdef __ENABLE_X11__
         else {
@@ -545,24 +505,18 @@ private:
 
     SharedPtr<NativeDisplay> m_nativeDisplay;
     VADisplay m_vaDisplay;
-    SharedPtr<VADisplay> m_vaDisplayPtr;
     SharedPtr<IVideoDecoder> m_decoder;
     SharedPtr<DecodeInput> m_input;
     int m_width, m_height;
-    int m_getFirst;
-    bool m_fileEnd;
-    //SharedPtr<DecodeOutput> m_output;
     bool m_eos;
-    FILE* m_fp;
     SimplePlayerParameter m_parameters;
     int m_drmFd;
     std::ofstream m_ofs;
-    bool m_gotFistFrame;
-    #ifdef __ENABLE_X11__    
+    uint64_t m_frameNum;
+#ifdef __ENABLE_X11__    
     SharedPtr<Display> m_display;    
     Window   m_window;
-    #endif
-    
+#endif
 };
 
 int main(int argc, char** argv)
@@ -583,7 +537,6 @@ int main(int argc, char** argv)
         return -1;
     }    
     
-    printf("dpwu  %s %s %d, player.m_frameNum = %d ====\n", __FILE__, __FUNCTION__, __LINE__, player.m_frameNum);
 #if (0)
     gettimeofday(&endx, NULL);
     fprintf(stderr, "%s %s %d, start = %ld, end = %ld, time_duration = %ld ====\n", __FILE__, __FUNCTION__, __LINE__, TIME_MS(startx), TIME_MS(endx), TIME_DURATION(endx, startx));
