@@ -27,9 +27,10 @@
 #include <sstream>
 #include <fstream>
 #include <unistd.h>
-
+#ifdef __ENABLE_X11__
 #include <X11/Xlib.h>
 #include <va/va_x11.h>
+#endif
 
 using namespace YamiMediaCodec;
 
@@ -126,6 +127,7 @@ bool processCmdLine(int argc, char** argv, SimplePlayerParameter* parameters)
 class SimplePlayer
 {
 public:
+    uint64_t getFrameNum() { return m_frameNum; }
     bool init(int argc, char** argv)
     {
         if (!processCmdLine(argc, argv, &m_parameters))
@@ -154,7 +156,9 @@ public:
     bool run()
     {
         VideoConfigBuffer configBuffer;
+
         memset(&configBuffer, 0, sizeof(configBuffer));
+
         configBuffer.profile = VAProfileNone;
         const string codecData = m_input->getCodecData();
         if (codecData.size()) {
@@ -166,34 +170,66 @@ public:
         assert(status == DECODE_SUCCESS);
 
         VideoDecodeBuffer inputBuffer;
-        while (m_input->getNextDecodeUnit(inputBuffer)) {
-            status = m_decoder->decode(&inputBuffer);
-            if (DECODE_FORMAT_CHANGE == status) {
-                //drain old buffers
-                renderOutputs();
-                const VideoFormatInfo *formatInfo = m_decoder->getFormatInfo();
-                resizeWindow(formatInfo->width, formatInfo->height);
-                //resend the buffer
-                status = m_decoder->decode(&inputBuffer);
+        SharedPtr<VideoFrame> frame;
+
+        while ((!m_parameters.outputFrameNumber) || (m_parameters.outputFrameNumber > 0 && m_frameNum < m_parameters.outputFrameNumber)) {
+            frame = m_decoder->getOutput();
+            if (frame) {
+                if (renderOutputs(frame))
+                    continue;
+                else
+                    return false;
             }
-            if(status == DECODE_SUCCESS) {
-                renderOutputs();
-            } else {
-                ERROR("decode error status = %d", status);
+            else if (m_eos) {
                 break;
             }
+
+            if (m_input->getNextDecodeUnit(inputBuffer)) {
+                status = m_decoder->decode(&inputBuffer);
+                if (DECODE_FORMAT_CHANGE == status) {
+                    //drain old buffers
+                    while ((!m_parameters.outputFrameNumber) || (m_parameters.outputFrameNumber > 0 && m_frameNum < m_parameters.outputFrameNumber)) {
+                        frame = m_decoder->getOutput();
+                        if (frame) {
+                            if (renderOutputs(frame))
+                                continue;
+                            else
+                                return false;
+                        }
+                        else {
+                            break;
+                        }
+                    }
+
+                    const VideoFormatInfo* formatInfo = m_decoder->getFormatInfo();
+#ifdef __ENABLE_X11__
+                    if (!m_parameters.dumpToFile)
+                        resizeWindow(formatInfo->width, formatInfo->height);
+#endif
+                    m_width = formatInfo->width;
+                    m_height = formatInfo->height;
+
+                    status = m_decoder->decode(&inputBuffer);
+                }
+                if (status != DECODE_SUCCESS) {
+                    ERROR("decode error status = %d", status);
+                    break;
+                }
+            }
+            else {
+                inputBuffer.data = NULL;
+                inputBuffer.size = 0;
+                m_decoder->decode(&inputBuffer);
+                m_eos = true;
+            }
         }
-        inputBuffer.data = NULL;
-        inputBuffer.size = 0;
-        m_decoder->decode(&inputBuffer);
-        renderOutputs();
 
         m_decoder->stop();
+
         return true;
     }
     SimplePlayer()
-        : m_window(0)
-        , m_width(0)
+        : m_width(0)
         , m_height(0)
     {
         m_parameters.inputFile.clear();
@@ -202,9 +238,14 @@ public:
         m_parameters.surfaceNumber = 0;
         m_parameters.readSize = 0;
         m_parameters.dumpToFile = true;
-        m_parameters.getFirstFrame = false;
         m_parameters.enableLowLatency = false;
+
+        m_eos = false;
         m_drmFd = -1;
+        m_frameNum = 0;
+#ifdef __ENABLE_X11__
+        m_window = 0;
+#endif
     }
     ~SimplePlayer()
     {
@@ -212,28 +253,113 @@ public:
         if (m_nativeDisplay) {
             vaTerminate(m_vaDisplay);
         }
+#ifdef __ENABLE_X11__
         if (m_window) {
             XDestroyWindow(m_display.get(), m_window);
         }
+#endif
         if (m_drmFd >= 0)
             close(m_drmFd);
+        if (m_ofs.is_open())
+            m_ofs.close();
     }
 private:
-    void renderOutputs()
+    bool getPlaneResolution_NV12(uint32_t pixelWidth, uint32_t pixelHeight, uint32_t byteWidth[3], uint32_t byteHeight[3])
     {
-        VAStatus status = VA_STATUS_SUCCESS;
-        do {
-            SharedPtr<VideoFrame> frame = m_decoder->getOutput();
-            if (!frame)
-                break;
+        int w = pixelWidth;
+        int h = pixelHeight;
+        uint32_t* width = byteWidth;
+        uint32_t* height = byteHeight;
+        //NV12 is special since it  need add one for width[1] when w is odd
+        {
+            width[0] = w;
+            height[0] = h;
+            width[1] = w + (w & 1);
+            height[1] = (h + 1) >> 1;
+            return true;
+        }
+    }
+
+    bool writeNV12ToFile(VASurfaceID surface, int w, int h)
+    {
+        if (!m_ofs.is_open()) {
+            ERROR("No output file for NV12.\n");
+            return false;
+        }
+
+        VAImage image;
+        VAStatus status = vaDeriveImage(m_vaDisplay, surface, &image);
+        if (status != VA_STATUS_SUCCESS) {
+            ERROR("vaDeriveImage failed = %d\n", status);
+            return false;
+        }
+        uint32_t byteWidth[3], byteHeight[3], planes;
+        //image.width is not equal to frame->crop.width.
+        //for supporting VPG Driver, use YV12 to replace I420
+        planes = 2;
+        if (!getPlaneResolution_NV12(w, h, byteWidth, byteHeight)) {
+            return false;
+        }
+        char* buf;
+        status = vaMapBuffer(m_vaDisplay, image.buf, (void**)&buf);
+        if (status != VA_STATUS_SUCCESS) {
+            vaDestroyImage(m_vaDisplay, image.image_id);
+            ERROR("vaMapBuffer failed = %d", status);
+            return false;
+        }
+        bool ret = true;
+        for (uint32_t i = 0; i < planes; i++) {
+            char* ptr = buf + image.offsets[i];
+            int w = byteWidth[i];
+            for (uint32_t j = 0; j < byteHeight[i]; j++) {
+                if (!m_ofs.write(reinterpret_cast<const char*>(ptr), w).good()) {
+                    goto out;
+                }
+                ptr += image.pitches[i];
+            }
+        }
+    out:
+        vaUnmapBuffer(m_vaDisplay, image.buf);
+        vaDestroyImage(m_vaDisplay, image.image_id);
+        return ret;
+    }
+
+    bool renderOutputs(const SharedPtr<VideoFrame>& frame)
+    {
+        if (m_parameters.dumpToFile) {
+            if (!m_ofs.is_open()) {
+                if (m_parameters.outputFile.empty()) {
+                    std::ostringstream stringStream;
+                    stringStream << m_parameters.inputFile.c_str();
+                    stringStream << "_NV12_" << m_width << "x" << m_height << ".yuv";
+                    m_parameters.outputFile = stringStream.str();
+                }
+                m_ofs.open(m_parameters.outputFile.c_str(), std::ofstream::out | std::ofstream::trunc);
+                if (!m_ofs) {
+                    ERROR("fail to open output file: %s", m_parameters.outputFile.c_str());
+                    return false;
+                }
+                CPPPRINT("output file: " << m_parameters.outputFile.c_str());
+            }
+
+            if (!writeNV12ToFile((VASurfaceID)frame->surface, m_width, m_height))
+                return false;
+        }
+#ifdef __ENABLE_X11__
+        else {
+            VAStatus status = VA_STATUS_SUCCESS;
             status = vaPutSurface(m_vaDisplay, (VASurfaceID)frame->surface,
                 m_window, 0, 0, m_width, m_height, 0, 0, m_width, m_height,
                 NULL, 0, 0);
             if (status != VA_STATUS_SUCCESS) {
                 ERROR("vaPutSurface return %d", status);
-                break;
+                return false;
             }
-        } while (1);
+        }
+#endif
+        m_frameNum++;
+
+        return true;
     }
 
     bool createVadisplay()
@@ -286,12 +412,14 @@ private:
         return true;
     }
 
+#ifdef __ENABLE_X11__
     void resizeWindow(int width, int height)
     {
         Display* display = m_display.get();
         if (m_window) {
-        //todo, resize window;
-        } else {
+            //todo, resize window;
+        }
+        else {
             DefaultScreen(display);
 
             XSetWindowAttributes x11WindowAttrib;
@@ -307,18 +435,23 @@ private:
             XWindowAttributes wattr;
             XGetWindowAttributes(display, m_window, &wattr);
         }
-        m_width = width;
-        m_height = height;
     }
-    SharedPtr<Display> m_display;
+#endif
+
     SharedPtr<NativeDisplay> m_nativeDisplay;
     VADisplay m_vaDisplay;
-    Window   m_window;
     SharedPtr<IVideoDecoder> m_decoder;
     SharedPtr<DecodeInput> m_input;
     int m_width, m_height;
+    bool m_eos;
     int m_drmFd;
+    std::ofstream m_ofs;
+    uint64_t m_frameNum;
     SimplePlayerParameter m_parameters;
+#ifdef __ENABLE_X11__
+    SharedPtr<Display> m_display;
+    Window m_window;
+#endif
 };
 
 int main(int argc, char** argv)
@@ -333,8 +466,7 @@ int main(int argc, char** argv)
         ERROR("run simple player failed");
         return -1;
     }
-    CPPPRINT("play file done\n");
+    CPPPRINT("get frame number: " << player.getFrameNum());
     return  0;
-
 }
 
