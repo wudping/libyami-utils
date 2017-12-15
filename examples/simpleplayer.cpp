@@ -175,6 +175,10 @@ public:
         while ((!m_parameters.outputFrameNumber) || (m_parameters.outputFrameNumber > 0 && m_frameNum < m_parameters.outputFrameNumber)) {
             frame = m_decoder->getOutput();
             if (frame) {
+                if (m_parameters.getFirstFrame) {
+                    m_frameNum++;
+                    break;
+                }
                 if (renderOutputs(frame))
                     continue;
                 else
@@ -238,6 +242,7 @@ public:
         m_parameters.surfaceNumber = 0;
         m_parameters.readSize = 0;
         m_parameters.dumpToFile = true;
+        m_parameters.getFirstFrame = false;
         m_parameters.enableLowLatency = false;
 
         m_eos = false;
