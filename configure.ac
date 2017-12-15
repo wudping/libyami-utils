@@ -174,6 +174,95 @@ AC_ARG_ENABLE(oclblender,
 AM_CONDITIONAL(BUILD_OCL_BLENDER,
     [test "x$enable_oclblender" = "xyes"])
 
+APPS=""
+
+dnl decoder
+AC_ARG_ENABLE(decode,
+    [AC_HELP_STRING([--enable-decode],
+        [build with decoder @<:@default=yes@:>@])],
+    [], [enable_decode="yes"])
+
+AM_CONDITIONAL(ENABLE_DECODER,
+    [test "x$enable_decode" = "xyes"])
+
+dnl encoder
+AC_ARG_ENABLE(encode,
+    [AC_HELP_STRING([--enable-encode],
+        [build with encoder @<:@default=yes@:>@])],
+    [], [enable_encode="yes"])
+
+AM_CONDITIONAL(ENABLE_ENCODER,
+    [test "x$enable_encode" = "xyes"])
+
+if test "$enable_encode" = "yes"; then
+    APPS="${APPS} yamiencode"
+fi
+
+dnl yamiinfo
+AC_ARG_ENABLE(yamiinfo,
+    [AC_HELP_STRING([--enable-yamiinfo],
+        [build with yamiinfo @<:@default=yes@:>@])],
+    [], [enable_yamiinfo="yes"])
+
+AM_CONDITIONAL(ENABLE_YAMIINFO,
+    [test "x$enable_yamiinfo" = "xyes"])
+
+if test "$enable_yamiinfo" = "yes"; then
+    APPS="${APPS} yamiinfo"
+fi
+
+dnl yamitranscode
+AC_ARG_ENABLE(yamitranscode,
+    [AC_HELP_STRING([--enable-yamitranscode],
+        [build with yamitranscode @<:@default=yes@:>@])],
+    [], [enable_yamitranscode="yes"])
+
+AM_CONDITIONAL(ENABLE_YAMITRANSCODE,
+    [test "x$enable_yamitranscode" = "xyes"])
+
+if test "$enable_yamitranscode" = "yes"; then
+    APPS="${APPS} yamitranscode"
+fi
+
+dnl yamivpp
+AC_ARG_ENABLE(yamivpp,
+    [AC_HELP_STRING([--enable-yamivpp],
+        [build with yamivpp @<:@default=yes@:>@])],
+    [], [enable_yamivpp="yes"])
+
+AM_CONDITIONAL(ENABLE_YAMIVPP,
+    [test "x$enable_yamivpp" = "xyes"])
+
+if test "$enable_yamivpp" = "yes"; then
+    APPS="${APPS} yamivpp"
+fi
+
+dnl simpleplayer
+AC_ARG_ENABLE(simpleplayer,
+    [AC_HELP_STRING([--enable-simpleplayer],
+        [build with simpleplayer @<:@default=yes@:>@])],
+    [], [enable_simpleplayer="yes"])
+
+AM_CONDITIONAL(ENABLE_SIMPLEPLAYER,
+    [test "x$enable_simpleplayer" = "xyes"])
+
+if test "$enable_simpleplayer" = "yes"; then
+    APPS="${APPS} simpleplayer"
+fi
+
+dnl psnr
+AC_ARG_ENABLE(psnr,
+    [AC_HELP_STRING([--enable-psnr],
+        [build with psnr @<:@default=yes@:>@])],
+    [], [enable_psnr="yes"])
+
+AM_CONDITIONAL(ENABLE_PSNR,
+    [test "x$enable_psnr" = "xyes"])
+
+if test "$enable_psnr" = "yes"; then
+    APPS="${APPS} psnr"
+fi
+
 AC_SUBST([AM_CFLAGS], ["-g -O2 -Wall -Wno-unused-function -Wno-cpp -Werror"])
 AC_SUBST([AM_CXXFLAGS], ["-g -O2 -Wall -Wno-unused-function -Wno-cpp -Wno-missing-braces -Werror"])
 
@@ -274,8 +363,6 @@ AC_CONFIG_FILES([Makefile
 AC_OUTPUT
 
 # Print a configuration summary
-APPS="yamidecode yamiencode yamiinfo yamitranscode yamivpp"
-
 AS_IF([test x$enable_v4l2 = xyes], [APPS="$APPS v4l2decode v4l2encode"])
 
 
