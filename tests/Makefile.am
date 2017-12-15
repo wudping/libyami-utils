@@ -1,4 +1,25 @@
-bin_PROGRAMS = yamidecode yamiencode yamivpp yamitranscode
+bin_PROGRAMS = $(NULL)
+
+if ENABLE_DECODER
+bin_PROGRAMS += yamidecode
+endif
+
+if ENABLE_ENCODER
+bin_PROGRAMS += yamiencode
+endif
+
+if ENABLE_YAMIVPP
+bin_PROGRAMS += yamivpp
+endif
+
+if ENABLE_YAMITRANSCODE
+bin_PROGRAMS += yamitranscode
+endif
+
+if ENABLE_YAMIINFO
+bin_PROGRAMS += yamiinfo
+endif
+
 if ENABLE_V4L2
 bin_PROGRAMS += v4l2encode v4l2decode
 endif
@@ -126,7 +147,6 @@ yamitranscode_LDADD    = $(YAMI_VPP_LIBS)
 yamitranscode_LDFLAGS  = -pthread $(YAMI_VPP_LDFLAGS)
 yamitranscode_SOURCES  = vppinputdecode.cpp vppinputoutput.cpp vppoutputencode.cpp  yamitranscode.cpp encodeinput.cpp encodeInputCamera.cpp encodeInputDecoder.cpp $(DECODE_INPUT_SOURCES) vppinputasync.cpp vppinputdecodecapi.cpp 
 
-bin_PROGRAMS += yamiinfo
 yamiinfo_SOURCES = yamiinfo.cpp
 yamiinfo_LDADD = $(YAMI_COMMON_LIBS)
 yamiinfo_LDFLAGS = -Wl,--no-as-needed \
