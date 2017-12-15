@@ -133,11 +133,15 @@ public:
         if (!processCmdLine(argc, argv, &m_parameters))
             return false;
 
-        m_input.reset(DecodeInput::create(m_parameters.inputFile.c_str()));
+        if (m_parameters.readSize)
+            m_input.reset(DecodeInput::create(m_parameters.inputFile.c_str(), m_parameters.readSize));
+        else
+            m_input.reset(DecodeInput::create(m_parameters.inputFile.c_str()));
         if (!m_input) {
             ERROR("failed to open %s", m_parameters.inputFile.c_str());
             return false;
         }
+        INFO("input initialization finished with file: %s", m_parameters.inputFile.c_str());
 
         //init decoder
         m_decoder.reset(createVideoDecoder(m_input->getMimeType()), releaseVideoDecoder);
@@ -164,6 +168,13 @@ public:
         if (codecData.size()) {
             configBuffer.data = (uint8_t*)codecData.data();
             configBuffer.size = codecData.size();
+        }
+
+        configBuffer.enableLowLatency = m_parameters.enableLowLatency;
+        if (m_parameters.surfaceNumber) {
+            configBuffer.noNeedExtraSurface = true;
+            configBuffer.flag |= HAS_SURFACE_NUMBER;
+            configBuffer.surfaceNumber = m_parameters.surfaceNumber;
         }
 
         Decode_Status status = m_decoder->start(&configBuffer);
