@@ -42,59 +42,6 @@ using namespace YamiMediaCodec;
 
 #define CPPPRINT(...) std::cout << __VA_ARGS__ << std::endl
 
-#if (0)
-struct VADisplayDeleter_dpwu
-{
-    VADisplayDeleter_dpwu(int fd):m_fd(fd) {}
-    void operator()(VADisplay* display)
-    {
-        printf("dpwu  %s %s %d ====\n", __FILE__, __FUNCTION__, __LINE__);
-        vaTerminate(*display);
-        delete display;
-        close(m_fd);
-    }
-private:
-    int m_fd;
-};
-#endif
-
-
-//static int i_dpwu = 0;
-#define OUTPUT_DPWU 1
-
-#if (0)
-#include <sys/time.h>
-static struct timeval startx, endx;
-static struct timeval before_vainit, vainit, decode;
-
-#define TIME_DURATION(end1, start1) ((end1.tv_sec * 1000 + end1.tv_usec / 1000) - (start1.tv_sec * 1000 + start1.tv_usec / 1000))
-#define TIME_MS(time_dd) (time_dd.tv_sec * 1000 + time_dd.tv_usec / 1000)
-#endif
-
-//static uint32_t output_all_file = 0;
-
-#define NEED_DELETE 1
-
-
-#if (OUTPUT_DPWU)
-
-#ifndef N_ELEMENTS
-#define N_ELEMENTS(array) (sizeof(array)/sizeof(array[0]))
-#endif
-
-struct ResolutionEntry {
-    uint32_t fourcc;
-    uint32_t planes;
-    //multiple to half width
-    //if it equals 1, you need divide width with 2
-    //if it equals 4, you need multiple width with 2
-    uint32_t widthMultiple[3];
-    uint32_t heightMultiple[3];
-};
-
-
-#endif
-
 typedef struct SimplePlayerParameter {
     string inputFile;
     string outputFile;
@@ -521,13 +468,7 @@ private:
 
 int main(int argc, char** argv)
 {
-    
-#if (0)
-    gettimeofday(&startx, NULL);
-#endif
-
     SimplePlayer player;
-    //show_h264();
     
     if (!player.init(argc, argv)) {
         return -1;
@@ -536,12 +477,7 @@ int main(int argc, char** argv)
         ERROR("run simple player failed");
         return -1;
     }    
-    
-#if (0)
-    gettimeofday(&endx, NULL);
-    fprintf(stderr, "%s %s %d, start = %ld, end = %ld, time_duration = %ld ====\n", __FILE__, __FUNCTION__, __LINE__, TIME_MS(startx), TIME_MS(endx), TIME_DURATION(endx, startx));
-#endif
+    CPPPRINT("get frame number: " << player.getFrameNum());
     return  0;
-
 }
 
