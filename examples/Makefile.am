@@ -1,12 +1,11 @@
-bin_PROGRAMS =
+bin_PROGRAMS = $(NULL)
 
-if ENABLE_X11
+if ENABLE_SIMPLEPLAYER
 bin_PROGRAMS += simpleplayer
+endif
 
 if BUILD_OCL_BLENDER
 bin_PROGRAMS += blend
-endif
-
 endif
 
 if ENABLE_DMABUF
@@ -81,11 +80,13 @@ VPP_INPUT_CFLAGS = \
 	$(LIBVA_CFLAGS) \
 	$(NULL)
 
-if ENABLE_X11
+if ENABLE_SIMPLEPLAYER
 simpleplayer_LDADD = $(YAMI_DECODE_LIBS)
 simpleplayer_LDFLAGS = $(LIBYAMI_CFLAGS)
 simpleplayer_SOURCES = simpleplayer.cpp $(DECODE_INPUT_SOURCES)
+endif
 
+if ENABLE_X11
 blend_LDADD = $(VPP_INPUT_LIBS) -lpthread
 blend_LDFLAGS = $(VPP_INPUT_LDFLAGS) $(LIBYAMI_CFLAGS)
 blend_SOURCES	= blend.cpp $(VPP_INPUT_SOURCES)
