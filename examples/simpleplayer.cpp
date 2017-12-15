@@ -114,7 +114,12 @@ bool processCmdLine(int argc, char** argv, SimplePlayerParameter* parameters)
         ERROR("no input file.");
         return false;
     }
-
+#ifndef __ENABLE_X11__
+    if (!parameters->dumpToFile) {
+        ERROR("x11 is disabled, so not support readering to X window!");
+        return false;
+    }
+#endif
     return true;
 }
 
@@ -199,6 +204,7 @@ public:
         m_parameters.dumpToFile = true;
         m_parameters.getFirstFrame = false;
         m_parameters.enableLowLatency = false;
+        m_drmFd = -1;
     }
     ~SimplePlayer()
     {
@@ -209,6 +215,8 @@ public:
         if (m_window) {
             XDestroyWindow(m_display.get(), m_window);
         }
+        if (m_drmFd >= 0)
+            close(m_drmFd);
     }
 private:
     void renderOutputs()
@@ -227,15 +235,41 @@ private:
             }
         } while (1);
     }
+
+    bool createVadisplay()
+    {
+        if (m_parameters.dumpToFile) {
+            m_drmFd = open("/dev/dri/renderD128", O_RDWR);
+            if (m_drmFd < 0) {
+                CPPPRINT("can't open /dev/dri/renderD128, try to /dev/dri/card0");
+                m_drmFd = open("/dev/dri/card0", O_RDWR);
+            }
+            if (m_drmFd < 0) {
+                ERROR("can't open drm device");
+                return false;
+            }
+
+            m_vaDisplay = vaGetDisplayDRM(m_drmFd);
+        }
+#ifdef __ENABLE_X11__
+        else {
+            Display* display = XOpenDisplay(NULL);
+            if (!display) {
+                ERROR("Failed to XOpenDisplay.\n");
+                return false;
+            }
+            m_display.reset(display, XCloseDisplay);
+            m_vaDisplay = vaGetDisplay(m_display.get());
+        }
+#endif
+        return true;
+    }
+
     bool initDisplay()
     {
-        Display* display = XOpenDisplay(NULL);
-        if (!display) {
-            ERROR("Failed to XOpenDisplay");
+        if (!createVadisplay())
             return false;
-        }
-        m_display.reset(display, XCloseDisplay);
-        m_vaDisplay = vaGetDisplay(m_display.get());
+
         int major, minor;
         VAStatus status;
         status = vaInitialize(m_vaDisplay, &major, &minor);
@@ -243,11 +277,15 @@ private:
             ERROR("init va failed status = %d", status);
             return false;
         }
+        else
+            INFO("major = %d, minor = %d\n", major, minor);
+
         m_nativeDisplay.reset(new NativeDisplay);
         m_nativeDisplay->type = NATIVE_DISPLAY_VA;
         m_nativeDisplay->handle = (intptr_t)m_vaDisplay;
         return true;
     }
+
     void resizeWindow(int width, int height)
     {
         Display* display = m_display.get();
@@ -279,6 +317,7 @@ private:
     SharedPtr<IVideoDecoder> m_decoder;
     SharedPtr<DecodeInput> m_input;
     int m_width, m_height;
+    int m_drmFd;
     SimplePlayerParameter m_parameters;
 };
 
