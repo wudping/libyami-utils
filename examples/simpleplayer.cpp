@@ -20,9 +20,12 @@
 #include "tests/decodeinput.h"
 #include "common/log.h"
 #include <Yami.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <fcntl.h>
+#include <va/va_drm.h>
+#include <iostream>
+#include <sstream>
+#include <fstream>
 #include <unistd.h>
 
 #include <X11/Xlib.h>
@@ -30,25 +33,26 @@
 
 using namespace YamiMediaCodec;
 
+#define CPPPRINT(...) std::cout << __VA_ARGS__ << std::endl
 class SimplePlayer
 {
 public:
     bool init(int argc, char** argv)
     {
         if (argc != 2) {
-            printf("usage: simpleplayer xxx.264\n");
+            CPPPRINT("usage: simpleplayer xxx.264");
             return false;
         }
         m_input.reset(DecodeInput::create(argv[1]));
         if (!m_input) {
-            fprintf(stderr, "failed to open %s", argv[1]);
+            ERROR("failed to open %s", argv[1]);
             return false;
         }
 
         //init decoder
         m_decoder.reset(createVideoDecoder(m_input->getMimeType()), releaseVideoDecoder);
         if (!m_decoder) {
-            fprintf(stderr, "failed create decoder for %s", m_input->getMimeType());
+            ERROR("failed create decoder for %s", m_input->getMimeType());
             return false;
         }
 
@@ -91,12 +95,18 @@ public:
                 break;
             }
         }
+        inputBuffer.data = NULL;
+        inputBuffer.size = 0;
+        m_decoder->decode(&inputBuffer);
+        renderOutputs();
+
         m_decoder->stop();
         return true;
     }
     SimplePlayer():m_window(0), m_width(0), m_height(0) {}
     ~SimplePlayer()
     {
+        m_decoder.reset();
         if (m_nativeDisplay) {
             vaTerminate(m_vaDisplay);
         }
@@ -125,7 +135,7 @@ private:
     {
         Display* display = XOpenDisplay(NULL);
         if (!display) {
-            fprintf(stderr, "Failed to XOpenDisplay \n");
+            ERROR("Failed to XOpenDisplay");
             return false;
         }
         m_display.reset(display, XCloseDisplay);
@@ -134,7 +144,7 @@ private:
         VAStatus status;
         status = vaInitialize(m_vaDisplay, &major, &minor);
         if (status != VA_STATUS_SUCCESS) {
-            fprintf(stderr, "init va failed status = %d", status);
+            ERROR("init va failed status = %d", status);
             return false;
         }
         m_nativeDisplay.reset(new NativeDisplay);
@@ -187,7 +197,7 @@ int main(int argc, char** argv)
         ERROR("run simple player failed");
         return -1;
     }
-    printf("play file done\n");
+    CPPPRINT("play file done\n");
     return  0;
 
 }
