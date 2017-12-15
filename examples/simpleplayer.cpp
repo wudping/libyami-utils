@@ -34,18 +34,101 @@
 using namespace YamiMediaCodec;
 
 #define CPPPRINT(...) std::cout << __VA_ARGS__ << std::endl
+
+typedef struct SimplePlayerParameter {
+    string inputFile;
+    string outputFile;
+    uint32_t outputFrameNumber;
+    uint16_t surfaceNumber;
+    uint32_t readSize;
+    bool dumpToFile;
+    bool getFirstFrame;
+    bool enableLowLatency;
+} SimplePlayerParameter;
+
+void printHelp(const char* app)
+{
+    CPPPRINT(app << " -i input.264 -m 0");
+    CPPPRINT("   -i media file to decode");
+    CPPPRINT("   -o specify the name of dumped output file");
+    CPPPRINT("   -r read size, only for 264, default 120539");
+    CPPPRINT("   -s surface number, only for 264, default 8");
+    CPPPRINT("   -l low latency");
+    CPPPRINT("   -g just to get surface of the first decoded frame");
+    CPPPRINT("   -n specify how many frames to be decoded");
+    CPPPRINT("   -m render mode, default 0");
+    CPPPRINT("      0: dump video frame to file in NV12 format [*]");
+    CPPPRINT("      1: render to X window [*]");
+}
+
+bool processCmdLine(int argc, char** argv, SimplePlayerParameter* parameters)
+{
+    char opt;
+    while ((opt = getopt(argc, argv, "h?r:s:lgi:o:n:m:")) != -1) {
+        switch (opt) {
+        case 'h':
+        case '?':
+            printHelp(argv[0]);
+            return false;
+        case 'r':
+            parameters->readSize = atoi(optarg);
+            break;
+        case 's':
+            parameters->surfaceNumber = atoi(optarg);
+            break;
+        case 'l':
+            parameters->enableLowLatency = true;
+            break;
+        case 'g':
+            parameters->getFirstFrame = true;
+            break;
+        case 'i':
+            parameters->inputFile.assign(optarg);
+            break;
+        case 'o':
+            parameters->outputFile.assign(optarg);
+            break;
+        case 'n':
+            parameters->outputFrameNumber = atoi(optarg);
+            break;
+        case 'm':
+            parameters->dumpToFile = !atoi(optarg);
+            break;
+        default:
+            printHelp(argv[0]);
+            return false;
+        }
+    }
+
+    if (optind < argc) {
+        int indexOpt = optind;
+        CPPPRINT("unrecognized option: ");
+        while (indexOpt < argc)
+            CPPPRINT(argv[indexOpt++]);
+        CPPPRINT("");
+        return false;
+    }
+
+    if (parameters->inputFile.empty()) {
+        printHelp(argv[0]);
+        ERROR("no input file.");
+        return false;
+    }
+
+    return true;
+}
+
 class SimplePlayer
 {
 public:
     bool init(int argc, char** argv)
     {
-        if (argc != 2) {
-            CPPPRINT("usage: simpleplayer xxx.264");
+        if (!processCmdLine(argc, argv, &m_parameters))
             return false;
-        }
-        m_input.reset(DecodeInput::create(argv[1]));
+
+        m_input.reset(DecodeInput::create(m_parameters.inputFile.c_str()));
         if (!m_input) {
-            ERROR("failed to open %s", argv[1]);
+            ERROR("failed to open %s", m_parameters.inputFile.c_str());
             return false;
         }
 
@@ -103,7 +186,20 @@ public:
         m_decoder->stop();
         return true;
     }
-    SimplePlayer():m_window(0), m_width(0), m_height(0) {}
+    SimplePlayer()
+        : m_window(0)
+        , m_width(0)
+        , m_height(0)
+    {
+        m_parameters.inputFile.clear();
+        m_parameters.outputFile.clear();
+        m_parameters.outputFrameNumber = 0;
+        m_parameters.surfaceNumber = 0;
+        m_parameters.readSize = 0;
+        m_parameters.dumpToFile = true;
+        m_parameters.getFirstFrame = false;
+        m_parameters.enableLowLatency = false;
+    }
     ~SimplePlayer()
     {
         m_decoder.reset();
@@ -183,6 +279,7 @@ private:
     SharedPtr<IVideoDecoder> m_decoder;
     SharedPtr<DecodeInput> m_input;
     int m_width, m_height;
+    SimplePlayerParameter m_parameters;
 };
 
 int main(int argc, char** argv)
