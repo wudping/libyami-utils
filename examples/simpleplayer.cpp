@@ -22,19 +22,15 @@
 #include <Yami.h>
 #include <stdlib.h>
 #include <fcntl.h>
-#include <unistd.h>
-
-#include <va/va.h>
-
-#ifdef __ENABLE_X11__
-#include <X11/Xlib.h>
-#include <va/va_x11.h>
-#endif
 #include <va/va_drm.h>
 #include <iostream>
 #include <sstream>
 #include <fstream>
 #include <sys/time.h>
+#ifdef __ENABLE_X11__
+#include <X11/Xlib.h>
+#include <va/va_x11.h>
+#endif
 
 using namespace YamiMediaCodec;
 
