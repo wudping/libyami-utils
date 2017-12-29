@@ -49,7 +49,7 @@ before_install:
  
 install:
   - git clone https://github.com/01org/libyami-utils.git
-  - (cd libyami-utils && ./autogen.sh  && make -j8 && sudo make install)
+  - (cd libyami-utils && ./autogen.sh  --enable-dmabuf --enable-v4l2 --enable-v4l2-glx --enable-v4l2-ops --enable-x11 --enable-wayland --enable-md5 --enable-tests-gles --enable-dmabuf --enable-debug && make -j8 && sudo make install)
 
 addons:
   coverity_scan:
