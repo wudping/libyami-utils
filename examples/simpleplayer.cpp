@@ -174,7 +174,7 @@ public:
         }
         return true;
     }
-protected:
+public:
     virtual bool setVideoSize(uint32_t width, uint32_t height);
     bool createWaylandDisplay();
     static void registryHandle(void *data, struct wl_registry *registry,
@@ -361,10 +361,14 @@ public:
             ERROR("failed create decoder for %s", m_input->getMimeType());
             return false;
         }
-
+#if (0)
         if (!initDisplay()) {
             return false;
         }
+#endif
+        m_decodeOutputWayland.init();
+        m_nativeDisplay = m_decodeOutputWayland.m_nativeDisplay;
+        m_display = m_decodeOutputWayland.m_vaDisplay;
         //set native display
         m_decoder->setNativeDisplay(m_nativeDisplay.get());
         return true;
@@ -402,10 +406,13 @@ public:
                     m_frameNum++;
                     break;
                 }
+                #if (0)
                 if (renderOutputs(frame))
                     continue;
                 else
                     return false;
+                #endif
+                m_decodeOutputWayland.output(frame);
             }
             else if (m_eos) {
                 break;
@@ -418,10 +425,13 @@ public:
                     while ((!m_parameters.outputFrameNumber) || (m_parameters.outputFrameNumber > 0 && m_frameNum < m_parameters.outputFrameNumber)) {
                         frame = m_decoder->getOutput();
                         if (frame) {
+                            #if (0)
                             if (renderOutputs(frame))
                                 continue;
                             else
                                 return false;
+                            #endif
+                            m_decodeOutputWayland.output(frame);
                         }
                         else {
                             break;
@@ -666,6 +676,7 @@ private:
     }
 #endif
 
+    DecodeOutputWayland m_decodeOutputWayland;
     SharedPtr<NativeDisplay> m_nativeDisplay;
     VADisplay m_vaDisplay;
     SharedPtr<IVideoDecoder> m_decoder;
