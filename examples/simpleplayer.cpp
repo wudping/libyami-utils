@@ -368,7 +368,6 @@ public:
 #endif
         m_decodeOutputWayland.init();
         m_nativeDisplay = m_decodeOutputWayland.m_nativeDisplay;
-        m_display = m_decodeOutputWayland.m_vaDisplay;
         //set native display
         m_decoder->setNativeDisplay(m_nativeDisplay.get());
         return true;
