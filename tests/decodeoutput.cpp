@@ -835,11 +835,11 @@ bool DecodeOutputWayland::vaPutSurfaceWayland(VASurfaceID surface,
 
     wl_surface_attach(d->surface.get(), buffer, 0, 0);
     wl_surface_damage(d->surface.get(), dstRect->x,
-		dstRect->y, dstRect->width, dstRect->height);
+        dstRect->y, dstRect->width, dstRect->height);
     wl_display_flush(d->display.get());
     m_redrawPending = true;
     callback = wl_surface_frame(d->surface.get());
-    wl_callback_add_listener(callback, &frame_callback_listener,&m_redrawPending);
+    wl_callback_add_listener(callback, &frame_callback_listener, &m_redrawPending);
     wl_surface_commit(d->surface.get());
     return true;
 }
