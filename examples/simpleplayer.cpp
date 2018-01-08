@@ -332,6 +332,7 @@ bool DecodeOutputWayland::createWaylandDisplay()
     wl_registry_add_listener(registry, &registry_listener, d);
     wl_display_dispatch(d->display.get());
     VADisplay vaDisplayHandle = vaGetDisplayWl(d->display.get());
+    
     VAStatus status = vaInitialize(vaDisplayHandle, &major, &minor);
     if (!checkVaapiStatus(status, "vaInitialize"))
         return false;
@@ -380,15 +381,20 @@ public:
             ERROR("failed create decoder for %s", m_input->getMimeType());
             return false;
         }
-#if (0)
+#if (1)
         if (!initDisplay()) {
             return false;
         }
 #endif
+        
+        printf("dpwu  %s %s %d ====\n", __FILE__, __FUNCTION__, __LINE__);
+#if (0)
         m_decodeOutputWayland.init();
         m_nativeDisplay = m_decodeOutputWayland.m_nativeDisplay;
         //set native display
+#endif
         m_decoder->setNativeDisplay(m_nativeDisplay.get());
+        printf("dpwu  %s %s %d ====\n", __FILE__, __FUNCTION__, __LINE__);
         return true;
     }
     bool run()
@@ -424,13 +430,16 @@ public:
                     m_frameNum++;
                     break;
                 }
-                #if (0)
+                #if (1)
                 if (renderOutputs(frame))
                     continue;
                 else
                     return false;
                 #endif
-                //m_decodeOutputWayland.output(frame);
+
+                #if (0)
+                m_decodeOutputWayland.output(frame);
+                #endif
             }
             else if (m_eos) {
                 break;
@@ -443,13 +452,15 @@ public:
                     while ((!m_parameters.outputFrameNumber) || (m_parameters.outputFrameNumber > 0 && m_frameNum < m_parameters.outputFrameNumber)) {
                         frame = m_decoder->getOutput();
                         if (frame) {
-                            #if (0)
+                            #if (1)
                             if (renderOutputs(frame))
                                 continue;
                             else
                                 return false;
                             #endif
-                            //m_decodeOutputWayland.output(frame);
+                            #if (0)
+                            m_decodeOutputWayland.output(frame);
+                            #endif
                         }
                         else {
                             break;
@@ -460,6 +471,10 @@ public:
 #ifdef __ENABLE_X11__
                     if (X11_RENDERING == m_parameters.outputMode)
                         resizeWindow(formatInfo->width, formatInfo->height);
+#endif
+#ifdef __ENABLE_WAYLAND__
+                    if (WAYLAND_RENDERING == m_parameters.outputMode)
+                        ensureWindow(formatInfo->width, formatInfo->height);
 #endif
                     m_width = formatInfo->width;
                     m_height = formatInfo->height;
@@ -502,6 +517,9 @@ public:
 #ifdef __ENABLE_X11__
         m_window = 0;
 #endif
+#ifdef __ENABLE_WAYLAND__
+        m_redrawPending = false;
+#endif
     }
     ~SimplePlayer()
     {
@@ -510,7 +528,7 @@ public:
             vaTerminate(m_vaDisplay);
         }
 #ifdef __ENABLE_X11__
-        if (m_window) {
+        if (m_window && X11_RENDERING == m_parameters.outputMode) {
             XDestroyWindow(m_display.get(), m_window);
         }
 #endif
@@ -520,6 +538,89 @@ public:
             m_ofs.close();
     }
 private:
+
+#ifdef __ENABLE_WAYLAND__
+    static void frameRedrawCallback(void *data,
+                                struct wl_callback *callback, uint32_t time)
+    {
+        *(bool *)data = false;
+        wl_callback_destroy(callback);
+    }
+
+    bool vaPutSurfaceWayland(VASurfaceID surface,
+                                                  const VARectangle *srcRect,
+                                                  const VARectangle *dstRect)
+    {
+        VAStatus vaStatus;
+        struct wl_buffer *buffer;
+        struct wl_callback *callback;
+        struct WaylanDisplay * const d = &m_waylandDisplay;
+        struct wl_callback_listener frame_callback_listener = {frameRedrawCallback};
+    
+        if (m_redrawPending) {
+            wl_display_flush(d->display.get());
+            while (m_redrawPending) {
+                wl_display_dispatch(d->display.get());
+            }
+        }
+    
+        if (!ensureWindow(dstRect->width, dstRect->height))
+            return false;
+    
+        vaStatus = vaGetSurfaceBufferWl(m_vaDisplay, surface, VA_FRAME_PICTURE, &buffer);
+        if (vaStatus != VA_STATUS_SUCCESS)
+            return false;
+    
+        wl_surface_attach(d->surface.get(), buffer, 0, 0);
+        wl_surface_damage(d->surface.get(), dstRect->x,
+            dstRect->y, dstRect->width, dstRect->height);
+        wl_display_flush(d->display.get());
+        m_redrawPending = true;
+        callback = wl_surface_frame(d->surface.get());
+        wl_callback_add_listener(callback, &frame_callback_listener, &m_redrawPending);
+        wl_surface_commit(d->surface.get());
+        return true;
+    }
+
+    bool waylandOutput(const SharedPtr<VideoFrame>& frame)
+    {
+        VARectangle srcRect, dstRect;
+        if (!ensureWindow(frame->crop.width, frame->crop.height))
+            return false;
+    
+        srcRect.x = 0;
+        srcRect.y = 0;
+        srcRect.width  = frame->crop.width;
+        srcRect.height = frame->crop.height;
+    
+        dstRect.x = frame->crop.x;
+        dstRect.y = frame->crop.y;
+        dstRect.width  = frame->crop.width;
+        dstRect.height = frame->crop.height;
+        return vaPutSurfaceWayland((VASurfaceID)frame->surface, &srcRect, &dstRect);
+    }
+
+    bool ensureWindow(unsigned int width, unsigned int height)
+    {
+        struct WaylanDisplay * const d = &m_waylandDisplay;
+    
+        if (!d->surface) {
+            d->surface.reset(wl_compositor_create_surface(d->compositor.get()), wl_surface_destroy);
+            if (!d->surface)
+                return false;
+        }
+    
+        if (!d->shell_surface) {
+            d->shell_surface.reset(wl_shell_get_shell_surface(d->shell.get(), d->surface.get()),
+                                                                           wl_shell_surface_destroy);
+            if (!d->shell_surface)
+                return false;
+            wl_shell_surface_set_toplevel(d->shell_surface.get());
+        }
+        return true;
+    }
+#endif
+
     bool getPlaneResolution_NV12(uint32_t pixelWidth, uint32_t pixelHeight, uint32_t byteWidth[3], uint32_t byteHeight[3])
     {
         int w = pixelWidth;
@@ -613,6 +714,12 @@ private:
             }
         }
 #endif
+
+#ifdef __ENABLE_WAYLAND__
+        else if (WAYLAND_RENDERING == m_parameters.outputMode) {
+            return waylandOutput(frame);
+        }
+#endif
         m_frameNum++;
 
         return true;
@@ -646,16 +753,41 @@ private:
             m_vaDisplay = vaGetDisplay(m_display.get());
         }
 #endif
+#ifdef __ENABLE_WAYLAND__
+        else if (WAYLAND_RENDERING == m_parameters.outputMode) {
+            printf("dpwu  %s %s %d ====\n", __FILE__, __FUNCTION__, __LINE__);
+            struct WaylanDisplay *d = &m_waylandDisplay;
+            struct wl_registry_listener registry_listener = {
+                DecodeOutputWayland::registryHandle,
+                NULL,
+            };
+        
+            d->display.reset(wl_display_connect(NULL), wl_display_disconnect);
+            if (!d->display) {
+                return false;
+            }
+            wl_display_set_user_data(d->display.get(), d);
+            struct wl_registry *registry = wl_display_get_registry(d->display.get());
+            wl_registry_add_listener(registry, &registry_listener, d);
+            wl_display_dispatch(d->display.get());
+            m_vaDisplay = vaGetDisplayWl(d->display.get());
+            printf("dpwu  %s %s %d ====\n", __FILE__, __FUNCTION__, __LINE__);
+        }
+#endif
         return true;
     }
 
+    
+
     bool initDisplay()
     {
+        printf("dpwu  %s %s %d, m_parameters.outputMode = %d ====\n", __FILE__, __FUNCTION__, __LINE__, m_parameters.outputMode);
         if (!createVadisplay())
             return false;
 
         int major, minor;
         VAStatus status;
+        printf("dpwu  %s %s %d ====\n", __FILE__, __FUNCTION__, __LINE__);
         status = vaInitialize(m_vaDisplay, &major, &minor);
         if (status != VA_STATUS_SUCCESS) {
             ERROR("init va failed status = %d", status);
@@ -663,10 +795,14 @@ private:
         }
         else
             INFO("major = %d, minor = %d\n", major, minor);
+        
+        printf("dpwu  %s %s %d ====\n", __FILE__, __FUNCTION__, __LINE__);
 
         m_nativeDisplay.reset(new NativeDisplay);
         m_nativeDisplay->type = NATIVE_DISPLAY_VA;
         m_nativeDisplay->handle = (intptr_t)m_vaDisplay;
+
+        printf("dpwu  %s %s %d ====\n", __FILE__, __FUNCTION__, __LINE__);
         return true;
     }
 
