@@ -140,15 +140,6 @@ bool processCmdLine(int argc, char** argv, SimplePlayerParameter* parameters)
 
 #ifdef __ENABLE_WAYLAND__
 
-struct VADisplayTerminator {
-    VADisplayTerminator() {}
-    void operator()(VADisplay* display)
-    {
-        vaTerminate(*display);
-        delete display;
-    }
-};
-
 #define checkVaapiStatus(status, prompt)                     \
     (                                                        \
         {                                                    \
@@ -159,14 +150,6 @@ struct VADisplayTerminator {
             ret;                                             \
         })
 
-struct display {
-    SharedPtr<wl_display>        display;
-    SharedPtr<wl_compositor>     compositor;
-    SharedPtr<wl_shell>          shell;
-    SharedPtr<wl_shell_surface>  shell_surface;
-    SharedPtr<wl_surface>        surface;
-};
-
 struct WaylanDisplay {
     SharedPtr<wl_display>        display;
     SharedPtr<wl_compositor>     compositor;
@@ -175,6 +158,7 @@ struct WaylanDisplay {
     SharedPtr<wl_surface>        surface;
 };
 
+#if (0)
 class DecodeOutputWayland
 {
 public:
@@ -203,7 +187,7 @@ public:
     bool vaPutSurfaceWayland(VASurfaceID surface,
                              const VARectangle *srcRect, const VARectangle *dstRect);
     bool m_redrawPending;
-    struct display m_waylandDisplay;
+    struct WaylanDisplay m_waylandDisplay;
     uint32_t m_width;
     uint32_t m_height;
     SharedPtr<VADisplay> m_vaDisplay;
@@ -354,6 +338,7 @@ DecodeOutputWayland::~DecodeOutputWayland()
 {
     m_vaDisplay.reset();
 }
+#endif
 #endif
 
 class SimplePlayer
@@ -545,6 +530,19 @@ private:
     {
         *(bool *)data = false;
         wl_callback_destroy(callback);
+    }
+
+    static void registryHandle(void *data, struct wl_registry *registry,
+                               uint32_t id, const char *interface, uint32_t version)
+    {
+        struct WaylanDisplay * d = (struct WaylanDisplay * )data;
+
+        if (strcmp(interface, "wl_compositor") == 0)
+            d->compositor.reset((struct wl_compositor *)wl_registry_bind(registry, id,
+                                                       &wl_compositor_interface, 1), wl_compositor_destroy);
+        else if (strcmp(interface, "wl_shell") == 0)
+            d->shell.reset((struct wl_shell *)wl_registry_bind(registry, id,
+                        &wl_shell_interface, 1), wl_shell_destroy);
     }
 
     bool vaPutSurfaceWayland(VASurfaceID surface,
@@ -759,7 +757,7 @@ private:
             printf("dpwu  %s %s %d ====\n", __FILE__, __FUNCTION__, __LINE__);
             struct WaylanDisplay *d = &m_waylandDisplay;
             struct wl_registry_listener registry_listener = {
-                DecodeOutputWayland::registryHandle,
+                SimplePlayer::registryHandle,
                 NULL,
             };
         
@@ -833,7 +831,7 @@ private:
     }
 #endif
 
-    DecodeOutputWayland m_decodeOutputWayland;
+//    DecodeOutputWayland m_decodeOutputWayland;
     SharedPtr<NativeDisplay> m_nativeDisplay;
     VADisplay m_vaDisplay;
     SharedPtr<IVideoDecoder> m_decoder;
