@@ -717,7 +717,8 @@ private:
 
 #ifdef __ENABLE_WAYLAND__
         else if (WAYLAND_RENDERING == m_parameters.outputMode) {
-            return waylandOutput(frame);
+            if(! waylandOutput(frame))
+                return false;
         }
 #endif
         m_frameNum++;
