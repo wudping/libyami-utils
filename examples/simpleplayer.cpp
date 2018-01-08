@@ -38,6 +38,9 @@
 using namespace YamiMediaCodec;
 
 #define CPPPRINT(...) std::cout << __VA_ARGS__ << std::endl
+#define FILE_OUTPUT          0
+#define X11_RENDERING        1
+#define WAYLAND_RENDERING    2
 
 typedef struct SimplePlayerParameter {
     string inputFile;
@@ -45,7 +48,7 @@ typedef struct SimplePlayerParameter {
     uint32_t outputFrameNumber;
     uint16_t surfaceNumber;
     uint32_t readSize;
-    bool dumpToFile;
+    uint16_t outputMode;
     bool getFirstFrame;
     bool enableLowLatency;
 } SimplePlayerParameter;
@@ -96,7 +99,7 @@ bool processCmdLine(int argc, char** argv, SimplePlayerParameter* parameters)
             parameters->outputFrameNumber = atoi(optarg);
             break;
         case 'm':
-            parameters->dumpToFile = !atoi(optarg);
+            parameters->outputMode = atoi(optarg);
             break;
         default:
             printHelp(argv[0]);
@@ -119,8 +122,16 @@ bool processCmdLine(int argc, char** argv, SimplePlayerParameter* parameters)
         return false;
     }
 #ifndef __ENABLE_X11__
-    if (!parameters->dumpToFile) {
+    printf("dpwu  %s %s %d, parameters->outputMode = %d ====\n", __FILE__, __FUNCTION__, __LINE__, parameters->outputMode);
+    if (X11_RENDERING == parameters->outputMode) {
         ERROR("x11 is disabled, so not support readering to X window!");
+        return false;
+    }
+#endif
+#ifndef __ENABLE_WAYLAND__
+    printf("dpwu  %s %s %d, parameters->outputMode = %d ====\n", __FILE__, __FUNCTION__, __LINE__, parameters->outputMode);
+    if (WAYLAND_RENDERING == parameters->outputMode) {
+        ERROR("WAYLAND is disabled, so not support readering to WAYLAND window!");
         return false;
     }
 #endif
@@ -149,6 +160,14 @@ struct VADisplayTerminator {
         })
 
 struct display {
+    SharedPtr<wl_display>        display;
+    SharedPtr<wl_compositor>     compositor;
+    SharedPtr<wl_shell>          shell;
+    SharedPtr<wl_shell_surface>  shell_surface;
+    SharedPtr<wl_surface>        surface;
+};
+
+struct WaylanDisplay {
     SharedPtr<wl_display>        display;
     SharedPtr<wl_compositor>     compositor;
     SharedPtr<wl_shell>          shell;
@@ -411,7 +430,7 @@ public:
                 else
                     return false;
                 #endif
-                m_decodeOutputWayland.output(frame);
+                //m_decodeOutputWayland.output(frame);
             }
             else if (m_eos) {
                 break;
@@ -430,7 +449,7 @@ public:
                             else
                                 return false;
                             #endif
-                            m_decodeOutputWayland.output(frame);
+                            //m_decodeOutputWayland.output(frame);
                         }
                         else {
                             break;
@@ -439,7 +458,7 @@ public:
 
                     const VideoFormatInfo* formatInfo = m_decoder->getFormatInfo();
 #ifdef __ENABLE_X11__
-                    if (!m_parameters.dumpToFile)
+                    if (X11_RENDERING == m_parameters.outputMode)
                         resizeWindow(formatInfo->width, formatInfo->height);
 #endif
                     m_width = formatInfo->width;
@@ -473,7 +492,7 @@ public:
         m_parameters.outputFrameNumber = 0;
         m_parameters.surfaceNumber = 0;
         m_parameters.readSize = 0;
-        m_parameters.dumpToFile = true;
+        m_parameters.outputMode = 0;
         m_parameters.getFirstFrame = false;
         m_parameters.enableLowLatency = false;
 
@@ -563,7 +582,7 @@ private:
 
     bool renderOutputs(const SharedPtr<VideoFrame>& frame)
     {
-        if (m_parameters.dumpToFile) {
+        if (FILE_OUTPUT == m_parameters.outputMode) {
             if (!m_ofs.is_open()) {
                 if (m_parameters.outputFile.empty()) {
                     std::ostringstream stringStream;
@@ -583,7 +602,7 @@ private:
                 return false;
         }
 #ifdef __ENABLE_X11__
-        else {
+        else if (X11_RENDERING == m_parameters.outputMode) {
             VAStatus status = VA_STATUS_SUCCESS;
             status = vaPutSurface(m_vaDisplay, (VASurfaceID)frame->surface,
                 m_window, 0, 0, m_width, m_height, 0, 0, m_width, m_height,
@@ -601,7 +620,9 @@ private:
 
     bool createVadisplay()
     {
-        if (m_parameters.dumpToFile) {
+    
+        printf("dpwu  %s %s %d, m_parameters.outputMode = %d ====\n", __FILE__, __FUNCTION__, __LINE__, m_parameters.outputMode);
+        if (FILE_OUTPUT == m_parameters.outputMode) {
             m_drmFd = open("/dev/dri/renderD128", O_RDWR);
             if (m_drmFd < 0) {
                 CPPPRINT("can't open /dev/dri/renderD128, try to /dev/dri/card0");
@@ -615,7 +636,7 @@ private:
             m_vaDisplay = vaGetDisplayDRM(m_drmFd);
         }
 #ifdef __ENABLE_X11__
-        else {
+        else if (X11_RENDERING == m_parameters.outputMode) {
             Display* display = XOpenDisplay(NULL);
             if (!display) {
                 ERROR("Failed to XOpenDisplay.\n");
@@ -690,6 +711,11 @@ private:
     SharedPtr<Display> m_display;
     Window m_window;
 #endif
+
+#ifdef __ENABLE_WAYLAND__
+    struct WaylanDisplay m_waylandDisplay;
+    bool m_redrawPending;
+#endif
 };
 
 int main(int argc, char** argv)
@@ -700,10 +726,12 @@ int main(int argc, char** argv)
         ERROR("init player failed with %s", argv[1]);
         return -1;
     }
+    printf("dpwu  %s %s %d ====\n", __FILE__, __FUNCTION__, __LINE__);
     if (!player.run()){
         ERROR("run simple player failed");
         return -1;
     }
+    printf("dpwu  %s %s %d ====\n", __FILE__, __FUNCTION__, __LINE__);
     CPPPRINT("get frame number: " << player.getFrameNum());
     return  0;
 }
