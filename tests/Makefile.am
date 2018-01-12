@@ -1,4 +1,4 @@
-bin_PROGRAMS = yamidecode yamiencode yamivpp yamitranscode
+bin_PROGRAMS = yamidecode yamiencode yamivpp yamitranscode yamiplayer
 if ENABLE_V4L2
 bin_PROGRAMS += v4l2encode v4l2decode
 endif
@@ -25,6 +25,14 @@ YAMI_COMMON_LIBS = \
 	$(NULL)
 
 YAMI_DECODE_LIBS = \
+	$(YAMI_COMMON_LIBS) \
+	$(NULL)
+
+YAMI_PLAYER_INPUT_SOURCES = \
+	decodeinput.cpp \
+	$(NULL)
+
+YAMI_PLAYER_LIBS = \
 	$(YAMI_COMMON_LIBS) \
 	$(NULL)
 
@@ -125,6 +133,10 @@ yamivpp_SOURCES  = vppinputdecode.cpp vppinputoutput.cpp vppoutputencode.cpp  vp
 yamitranscode_LDADD    = $(YAMI_VPP_LIBS)
 yamitranscode_LDFLAGS  = -pthread $(YAMI_VPP_LDFLAGS)
 yamitranscode_SOURCES  = vppinputdecode.cpp vppinputoutput.cpp vppoutputencode.cpp  yamitranscode.cpp encodeinput.cpp encodeInputCamera.cpp encodeInputDecoder.cpp $(DECODE_INPUT_SOURCES) vppinputasync.cpp vppinputdecodecapi.cpp 
+
+yamiplayer_LDADD    = $(YAMI_PLAYER_LIBS)
+yamiplayer_LDFLAGS  = $(LIBYAMI_CFLAGS)
+yamiplayer_SOURCES  = yamiplayer.cpp $(YAMI_PLAYER_INPUT_SOURCES)
 
 bin_PROGRAMS += yamiinfo
 yamiinfo_SOURCES = yamiinfo.cpp
